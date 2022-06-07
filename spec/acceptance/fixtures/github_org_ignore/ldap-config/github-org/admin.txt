@@ -1,0 +1,8 @@
+username = blackmanx
+username = mainecoon
+
+# korat is invited
+username = korat
+
+# cyprus moves in from the member role
+username = cyprus

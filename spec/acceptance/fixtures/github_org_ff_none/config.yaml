@@ -1,0 +1,31 @@
+<%-
+require "/data/entitlements/lib/entitlements/backend/github_org"
+require "/data/entitlements/lib/entitlements/backend/github_team"
+require "/data/entitlements/lib/entitlements/service/github"
+-%>
+---
+configuration_path: ./ldap-config
+extras:
+  ldap_group: {}
+  orgchart:
+    manager_map_file: ../common/manager-map.yaml
+groups:
+  github-org:
+    addr: https://github.fake
+    base: ou=meowsister-org,ou=GitHub,dc=github,dc=fake
+    org: meowsister
+    token: meowmeowmeowmeowmeow
+    type: github_org
+    features: []
+people:
+  ldap:
+    type: ldap
+    config:
+      base: ou=People,dc=kittens,dc=net
+      ldap_binddn: <%= ENV["LDAP_BINDDN"] %>
+      ldap_bindpw: <%= ENV["LDAP_BINDPW"] %>
+      ldap_uri: <%= ENV["LDAP_URI"] %>
+      person_dn_format: uid=%KEY%,ou=People,dc=kittens,dc=net
+      additional_attributes:
+        - shellentitlements
+people_data_source: ldap

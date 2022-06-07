@@ -1,0 +1,10 @@
+description = Fake team on fake GitHub
+metadata_team_id = 4
+username = blackmanx
+username = russianblue
+entitlements_group = dummy-ou-renamed/bacon
+username = RagaMuffin
+username = cheetoh
+username = khaomanee
+username = nebelung
+group = dummy-ou/tony

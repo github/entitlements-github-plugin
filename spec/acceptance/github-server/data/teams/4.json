@@ -1,0 +1,12 @@
+{
+  "name": "Employees",
+  "id": 4,
+  "node_id": "MDQ6VGVhbTQ=",
+  "slug": "employees",
+  "description": "GitHub Employees Only",
+  "privacy": "closed",
+  "url": "http://api.github.localhost/teams/4",
+  "members_url": "http://api.github.localhost/teams/4/members{/member}",
+  "repositories_url": "http://api.github.localhost/teams/4/repos",
+  "permission": "pull"
+}

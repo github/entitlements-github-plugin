@@ -1,0 +1,4 @@
+description = Fake team on fake GitHub
+metadata_parent_team_name = employees
+username = blackmanx
+username = donskoy

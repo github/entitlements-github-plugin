@@ -1,0 +1,14 @@
+{
+  "name": "child-team",
+  "id": 7,
+  "node_id": "MDQ6VGVhbTI2",
+  "slug": "child-team",
+  "description": "Child Team",
+  "privacy": "closed",
+  "url": "http://api.github.localhost/teams/7",
+  "members_url": "http://api.github.localhost/teams/7/members{/member}",
+  "repositories_url": "http://api.github.localhost/teams/7/repos",
+  "permission": "pull",
+  "parent_team_name": "employees",
+  "parent_team_id": 4
+}

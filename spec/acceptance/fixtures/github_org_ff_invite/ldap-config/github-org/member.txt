@@ -1,0 +1,18 @@
+username = ojosazules
+username = chausie
+username = khaomanee
+
+# cheetoh returns from lockout and will be re-invited
+username = cheetoh
+
+# russianblue / donskoy are not known to the organization and will be invited
+username = rUssianblue
+username = DONSKoy
+
+# peterbald moves in from the admin role
+username = peterbald
+
+# Previous members to simulate removal
+#username = ragamuffin
+#username = minskin
+#username = nebelung

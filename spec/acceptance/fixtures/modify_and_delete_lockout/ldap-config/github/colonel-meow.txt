@@ -1,0 +1,3 @@
+description = Fake team on fake GitHub
+group = pizza_teams/colonel-meow
+metadata_team_id=6

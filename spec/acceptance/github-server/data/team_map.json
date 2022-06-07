@@ -1,0 +1,6 @@
+{
+  "employees": { "id": 4, "parent_team_name": "nil", "parent_team_id": "nil" },
+  "grumpy-cat": { "id": 5, "parent_team_name": "nil", "parent_team_id": "nil" },
+  "colonel-meow": { "id": 6, "parent_team_name": "nil", "parent_team_id": "nil" },
+  "child-team": { "id": 7, "parent_team_name": "employees", "parent_team_id": 4 }
+}

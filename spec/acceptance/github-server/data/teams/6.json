@@ -1,0 +1,12 @@
+{
+  "name": "colonel-meow",
+  "id": 6,
+  "node_id": "MDQ6VGVhbTI2",
+  "slug": "colonel-meow",
+  "description": "Colonel Meow",
+  "privacy": "closed",
+  "url": "http://api.github.localhost/teams/6",
+  "members_url": "http://api.github.localhost/teams/6/members{/member}",
+  "repositories_url": "http://api.github.localhost/teams/6/repos",
+  "permission": "pull"
+}

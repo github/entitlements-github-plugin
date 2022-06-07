@@ -1,0 +1,12 @@
+# Already existing members
+username = khaomanee
+
+# Pending members
+username = ojosazules
+username = cyprus
+
+# Formerly an admin
+username = peterbald
+
+# existing person who accepted an invite but was not in this role
+username = minskin

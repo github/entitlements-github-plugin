@@ -1,0 +1,32 @@
+# existing admins
+username = blackmanx
+
+# former member, now admin
+username = ragamuffin
+
+# pending admins
+username = chausie
+
+# admin that is being invited
+username = korat
+
+# existing members
+username = khaomanee
+
+# pending members
+username = ojosazules
+username = cyprus
+
+# former admin, now member
+username = peterbald
+
+# not member, not admin, on team
+username = BALINESE
+username = desertlynx
+username = DwelF
+
+# offboarded from organization
+# username = nebelung
+
+# offboarded from organization during this run
+username = napoleon

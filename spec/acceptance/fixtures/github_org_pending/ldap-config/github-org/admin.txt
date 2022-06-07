@@ -1,0 +1,12 @@
+# these are existing admins
+username = blackmanx
+username = mainecoon
+
+# ragamuffin was previously a member
+username = ragamuffin
+
+# chausie is pending already
+username = chausie
+
+# korat is not invited yet and needs to be invited now
+username = korat

@@ -1,0 +1,4 @@
+description = Fake team on fake GitHub
+username = blackmanx
+username = mainecoon
+metadata_team_id=5

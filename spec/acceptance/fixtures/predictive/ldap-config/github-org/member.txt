@@ -1,0 +1,3 @@
+entitlements_group = github/*
+entitlements_group != github-org/admin
+username = donskoy

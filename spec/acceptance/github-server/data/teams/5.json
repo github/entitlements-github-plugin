@@ -1,0 +1,12 @@
+{
+  "name": "grumpy-cat",
+  "id": 5,
+  "node_id": "MDQ6VGVhbTU=",
+  "slug": "grumpy-cat",
+  "description": "grumpy-cat Team",
+  "privacy": "closed",
+  "url": "http://api.github.localhost/teams/5",
+  "members_url": "http://api.github.localhost/teams/5/members{/member}",
+  "repositories_url": "http://api.github.localhost/teams/5/repos",
+  "permission": "pull"
+}
