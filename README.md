@@ -8,7 +8,7 @@
 
 Your `entitlements-app` config `config/entitlements.yaml` runs through ERB interpretation automatically. You can extend your entitlements configuration to load plugins like so:
 
-```
+```ruby
 <%-
   unless ENV['CI_MODE']
     begin
@@ -27,7 +27,7 @@ Your `entitlements-app` config `config/entitlements.yaml` runs through ERB inter
 
 You can then define `lib/entitlements-and-plugins` like so:
 
-```
+```ruby
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
@@ -49,7 +49,7 @@ Any plugins defined in `lib/entitlements-and-plugins` will be loaded and used at
 
 `entitlements-github-plugin` manages org team membership to two roles - `admin` and `member`. Your `entitlements-app` config `config/entitlements.yaml` is used to configure the location for the declarations of this membership.
 
-```
+```ruby
   github.com/github/org:
     addr: <%= ENV["GITHUB_API_BASE"] %>
     base: ou=org,ou=github,ou=GitHub,dc=github,dc=com
@@ -65,7 +65,7 @@ Any plugins defined in `lib/entitlements-and-plugins` will be loaded and used at
 
 `entitlements-github-plugin` manages membership for all teams listed in the defined subfolder. The plugin will use extension-less name of the file as the team name. GitHub Team management can be configured like so:
 
-```
+```ruby
   github.com/github/teams:
     addr: <%= ENV["GITHUB_API_BASE"] %>
     base: ou=teams,ou=github,ou=GitHub,dc=github,dc=com
