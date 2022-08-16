@@ -67,7 +67,7 @@ echo "Building $gem"
     cd "tmp/gems/$gem"
     git init -q
     git fetch -q -fu "$url" "+refs/*:refs/*"
-    git reset --hard HEAD
+    git reset --hard "$rev"
     git clean -df
     git checkout "$rev"
     git submodule update --init
@@ -77,7 +77,7 @@ echo "Building $gem"
     gemspec=$(ls -1 *.gemspec | head -1)
     echo "Building $gemspec"
 
-    gemname=$(basename "$gemspec" .gemspec)
+    gemname=$gem # $(basename "$gemspec" .gemspec)
     echo $gemname > vendor-gem-name
 
     # tag name + number of commits on top of tag + tree sha
@@ -144,5 +144,5 @@ newref=$(ls vendor/cache/$gemname-*.gem | grep -o -E -e "g[0-9a-f]{7}" | cut -c 
 echo "$repo/compare/$oldref...$newref"
 
 rm -rf "tmp"
-bundle update --local $gemname
-git add Gemfile Gemfile.lock
+# bundle update --local $gemname
+# git add Gemfile Gemfile.lock
