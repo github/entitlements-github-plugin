@@ -153,6 +153,19 @@ module MyLetDeclarations
   let(:logger) { Entitlements.dummy_logger }
 end
 
+module Contracts
+  module RSpec
+    module Mocks
+      def instance_double(klass, *args)
+        super.tap do |double|
+          allow(double).to receive(:is_a?).with(klass).and_return(true)
+          allow(double).to receive(:is_a?).with(ParamContractError).and_return(false)
+        end
+      end
+    end
+  end
+end
+
 RSpec.configure do |config|
   config.include Contracts::RSpec::Mocks
   config.include MyLetDeclarations
