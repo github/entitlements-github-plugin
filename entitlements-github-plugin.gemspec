@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.executables = %w[]
 
   s.add_dependency "concurrent-ruby", "= 1.1.9"
-  s.add_dependency "contracts", "= 0.16.0"
+  s.add_dependency "contracts", "= 0.17.0"
   s.add_dependency "faraday", "~> 2.0"
   s.add_dependency "faraday-retry", "~> 2.0"
   s.add_dependency "net-ldap", "~> 0.17.0"
