@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    entitlements-github-plugin (0.0.1)
+    entitlements-github-plugin (0.1.0)
       concurrent-ruby (= 1.1.9)
       contracts (= 0.17.0)
       faraday (~> 2.0)
