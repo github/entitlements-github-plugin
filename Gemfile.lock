@@ -28,7 +28,7 @@ GEM
       rexml
     diff-lcs (1.4.4)
     docile (1.4.0)
-    entitlements (0.1.5.g0306a452)
+    entitlements (0.1.7)
       concurrent-ruby (= 1.1.9)
       contracts (= 0.16.0)
       faraday (>= 0.17.3, < 0.18)
@@ -120,7 +120,7 @@ PLATFORMS
 
 DEPENDENCIES
   contracts-rspec (= 0.1.0)
-  entitlements (= 0.1.5.g0306a452)
+  entitlements (= 0.1.7)
   entitlements-github-plugin!
   rake (= 13.0.6)
   rspec (= 3.8.0)
@@ -135,4 +135,4 @@ DEPENDENCIES
   webmock (= 3.4.2)
 
 BUNDLED WITH
-   2.3.5
+   2.3.9
