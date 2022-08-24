@@ -20,7 +20,7 @@ Gem::Specification.new do |s|
   s.add_dependency "optimist", "= 3.0.0"
 
   s.add_development_dependency "contracts-rspec", "= 0.1.0"
-  s.add_development_dependency "entitlements", "0.1.5.g0306a452"
+  s.add_development_dependency "entitlements", "0.1.7"
   s.add_development_dependency "rake", "= 13.0.6"
   s.add_development_dependency "rspec", "= 3.8.0"
   s.add_development_dependency "rspec-core", "= 3.8.0"
