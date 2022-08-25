@@ -14,6 +14,7 @@ Gem::Specification.new do |s|
 
   s.add_dependency "entitlements", "0.1.8"
   s.add_dependency "faraday", "< 3", ">= 1"
+  s.add_dependency "faraday-retry", "~> 2.0"
   s.add_dependency "octokit", "~> 4.25"
 
   s.add_development_dependency "contracts-rspec", "= 0.1.0"
