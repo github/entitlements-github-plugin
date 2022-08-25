@@ -338,7 +338,7 @@ describe Entitlements::Service::GitHub do
     it "logs and returns raw text for JSON parsing error" do
       answer = "mor chicken mor rewardz!"
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: answer)
-      expect(logger).to receive(:error).with("JSON::ParserError 809: unexpected token at 'mor chicken mor rewardz!': \"mor chicken mor rewardz!\"")
+      expect(logger).to receive(:error).with("JSON::ParserError 859: unexpected token at 'mor chicken mor rewardz!': \"mor chicken mor rewardz!\"")
       response = subject.send(:graphql_http_post_real, "nonsense")
       expect(response).to eq(code: 500, data: { "body" => "mor chicken mor rewardz!" })
     end
