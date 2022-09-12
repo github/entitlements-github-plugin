@@ -2,13 +2,10 @@ PATH
   remote: .
   specs:
     entitlements-github-plugin (0.1.0)
-      concurrent-ruby (= 1.1.9)
       contracts (= 0.17.0)
       faraday (~> 2.0)
       faraday-retry (~> 2.0)
-      net-ldap (~> 0.17.0)
-      octokit (~> 4.18)
-      optimist (= 3.0.0)
+      octokit (~> 4.25)
 
 GEM
   remote: https://rubygems.org/

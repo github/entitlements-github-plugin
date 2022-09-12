@@ -12,13 +12,10 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/github/entitlements-github-plugin"
   s.executables = %w[]
 
-  s.add_dependency "concurrent-ruby", "= 1.1.9"
   s.add_dependency "contracts", "= 0.17.0"
   s.add_dependency "faraday", "~> 2.0"
   s.add_dependency "faraday-retry", "~> 2.0"
-  s.add_dependency "net-ldap", "~> 0.17.0"
-  s.add_dependency "octokit", "~> 4.18"
-  s.add_dependency "optimist", "= 3.0.0"
+  s.add_dependency "octokit", "~> 4.25"
 
   s.add_development_dependency "entitlements", "0.2.0"
   s.add_development_dependency "rake", "= 13.0.6"
