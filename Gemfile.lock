@@ -27,10 +27,10 @@ GEM
       rexml
     diff-lcs (1.5.0)
     docile (1.4.0)
-    entitlements (0.2.0.g8e5e05d)
+    entitlements (0.2.0)
       concurrent-ruby (= 1.1.9)
       faraday (~> 2.0)
-      net-ldap (~> 0.17.0)
+      net-ldap (~> 0.17)
       octokit (~> 4.18)
       optimist (= 3.0.0)
     faraday (2.5.2)
@@ -119,7 +119,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  entitlements (= 0.2.0.g8e5e05d)
+  entitlements (= 0.2.0)
   entitlements-github-plugin!
   rake (= 13.0.6)
   rspec (= 3.8.0)
