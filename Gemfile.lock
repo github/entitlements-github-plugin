@@ -1,9 +1,9 @@
 PATH
   remote: .
   specs:
-    entitlements-github-plugin (0.0.2)
-      entitlements (= 0.1.8)
-      faraday (>= 1, < 3)
+    entitlements-github-plugin (0.2.0)
+      contracts (= 0.17.0)
+      faraday (~> 2.0)
       faraday-retry (~> 2.0)
       octokit (~> 4.25)
 
@@ -19,16 +19,16 @@ GEM
       public_suffix (>= 2.0.2, < 6.0)
     ast (2.4.2)
     concurrent-ruby (1.1.9)
-    contracts (0.16.0)
-    contracts-rspec (0.1.0)
+    contracts (0.17)
     crack (0.4.5)
       rexml
     diff-lcs (1.5.0)
     docile (1.4.0)
-    entitlements (0.1.8)
+    entitlements (0.2.0)
       concurrent-ruby (= 1.1.9)
-      contracts (= 0.16.0)
-      net-ldap (~> 0.17.0)
+      faraday (~> 2.0)
+      net-ldap (~> 0.17)
+      octokit (~> 4.18)
       optimist (= 3.0.0)
     faraday (2.5.2)
       faraday-net_http (>= 2.0, < 3.1)
@@ -100,8 +100,8 @@ GEM
       docile (~> 1.1)
       json (>= 1.8, < 3)
       simplecov-html (~> 0.10.0)
-    simplecov-erb (0.1.1)
-      simplecov
+    simplecov-erb (1.0.1)
+      simplecov (< 1.0)
     simplecov-html (0.10.2)
     tzinfo (2.0.5)
       concurrent-ruby (~> 1.0)
@@ -114,10 +114,9 @@ GEM
 
 PLATFORMS
   ruby
-  x86_64-darwin-20
 
 DEPENDENCIES
-  contracts-rspec (= 0.1.0)
+  entitlements (= 0.2.0)
   entitlements-github-plugin!
   rake (= 13.0.6)
   rspec (= 3.8.0)
@@ -127,9 +126,9 @@ DEPENDENCIES
   rubocop-performance (= 1.13.3)
   rugged (= 0.27.5)
   simplecov (= 0.16.1)
-  simplecov-erb (= 0.1.1)
+  simplecov-erb (= 1.0.1)
   vcr (= 4.0.0)
   webmock (= 3.4.2)
 
 BUNDLED WITH
-   2.3.9
+   2.3.19

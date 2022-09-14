@@ -13,7 +13,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
 
   let(:provider_config) { config.merge(base: config[:ou]).map { |k, v| [k.to_s, v] }.to_h }
 
-  let(:github) { Entitlements::Backend::GitHubTeam::Service.new(config) }
+  let(:github) { Entitlements::Backend::GitHubTeam::Service.new(**config) }
 
   let(:snowshoe) { Entitlements::Models::Person.new(uid: "snowshoe") }
   let(:russian_blue) { Entitlements::Models::Person.new(uid: "russian_blue") }

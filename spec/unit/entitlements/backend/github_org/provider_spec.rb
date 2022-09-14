@@ -13,7 +13,7 @@ describe Entitlements::Backend::GitHubOrg::Provider do
 
   let(:provider_config) { config.merge(base: config[:ou]).map { |k, v| [k.to_s, v] }.to_h }
 
-  let(:github) { Entitlements::Backend::GitHubOrg::Service.new(config) }
+  let(:github) { Entitlements::Backend::GitHubOrg::Service.new(**config) }
 
   let(:subject) { described_class.new(config: provider_config) }
 

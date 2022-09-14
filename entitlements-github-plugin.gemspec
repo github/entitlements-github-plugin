@@ -12,12 +12,12 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/github/entitlements-github-plugin"
   s.executables = %w[]
 
-  s.add_dependency "entitlements", "0.1.8"
-  s.add_dependency "faraday", "< 3", ">= 1"
+  s.add_dependency "contracts", "= 0.17.0"
+  s.add_dependency "faraday", "~> 2.0"
   s.add_dependency "faraday-retry", "~> 2.0"
   s.add_dependency "octokit", "~> 4.25"
 
-  s.add_development_dependency "contracts-rspec", "= 0.1.0"
+  s.add_development_dependency "entitlements", "0.2.0"
   s.add_development_dependency "rake", "= 13.0.6"
   s.add_development_dependency "rspec", "= 3.8.0"
   s.add_development_dependency "rspec-core", "= 3.8.0"
@@ -26,7 +26,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency "rubocop-performance", "= 1.13.3"
   s.add_development_dependency "rugged", "= 0.27.5"
   s.add_development_dependency "simplecov", "= 0.16.1"
-  s.add_development_dependency "simplecov-erb", "= 0.1.1"
+  s.add_development_dependency "simplecov-erb", "= 1.0.1"
   s.add_development_dependency "vcr", "= 4.0.0"
   s.add_development_dependency "webmock", "3.4.2"
 end

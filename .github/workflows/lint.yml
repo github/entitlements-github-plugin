@@ -19,7 +19,7 @@ jobs:
 
       - uses: ruby/setup-ruby@8029ebd6e5bd8f4e0d6f7623ea76a01ec5b1010d # pin@v1.110.0
         with:
-          ruby-version: 2.7.5
+          ruby-version: 3.1.2
           bundler-cache: true
 
       - name: rubocop

@@ -394,4 +394,4 @@ class FakeGitHubApi < Sinatra::Base
   end
 end
 
-Rack::Handler::WEBrick.run FakeGitHubApi, webrick_options
+Rack::Handler::WEBrick.run FakeGitHubApi, **webrick_options
