@@ -25,30 +25,31 @@ jobs:
         run: git fetch --no-tags --prune --depth=1 origin '+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}'
 
       - id: diff
-        if: github.event_name == 'pull_request'
         name: diff against the base branch latest commit for specific paths
         run: |
-          git diff \
-            origin/${{ github.base_ref }} \
-            HEAD \
-            -- \
-              'bin/**' \
-              'lib/**' \
-              'script/**' \
-              'spec/**' \
-              'vendor/**' \
-              '.ruby-version' \
-              'entitlements-github-plugin.gemspec' \
-              'Gemfile' \
-              'Gemfile.lock' \
-            > diff.txt
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git diff \
+              origin/${{ github.base_ref }} \
+              HEAD \
+              -- \
+                'bin/**' \
+                'lib/**' \
+                'script/**' \
+                'spec/**' \
+                'vendor/**' \
+                '.ruby-version' \
+                'entitlements-github-plugin.gemspec' \
+                'Gemfile' \
+                'Gemfile.lock' \
+              > diff.txt
 
             # If the diff file is not empty, it has changes.
-            [ -s diff.txt ] && echo "::set-output name=has_change::true" || echo "::set-output name=has_change::false"
-
-      - name: set has_change to true for push to main/master
-        if: github.event_name == 'push'
-        run: echo "::set-output name=has_change::true"
+            if [ -s diff.txt ]; then
+              echo "::set-output name=has_change::true"
+            fi
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            echo "::set-output name=has_change::true"
+          fi
 
   acceptance-suite:
     needs: changes
