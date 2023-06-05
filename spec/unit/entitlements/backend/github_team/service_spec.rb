@@ -84,7 +84,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/team-does-not-exist")
-      expect(logger).to receive(:warn).with("Team team-does-not-exist does not exist in this GitHub.com organization")
+      expect(logger).to receive(:warn).with("Team team-does-not-exist does not exist in this GitHub.com organization. If applied, the team will be created.")
       result = subject.read_team(entitlement_group_doesnt_exist)
       expect(result).to eq(nil)
     end

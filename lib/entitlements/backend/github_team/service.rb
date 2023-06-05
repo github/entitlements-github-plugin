@@ -111,7 +111,7 @@ module Entitlements
                   metadata: team_metadata
                 )
               rescue TeamNotFound
-                Entitlements.logger.warn "Team #{team_identifier} does not exist in this GitHub.com organization"
+                Entitlements.logger.warn "Team #{team_identifier} does not exist in this GitHub.com organization. If applied, the team will be created."
                 return nil
               end
 
