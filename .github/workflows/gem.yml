@@ -1,10 +1,8 @@
 name: Publish and Release Gem
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "VERSION"
+    branches: [ $default-branch ]
+    paths: [ "VERSION" ]
   workflow_dispatch:
 
 jobs:
