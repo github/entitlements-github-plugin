@@ -4,6 +4,7 @@ require_relative "models/team"
 require_relative "../../service/github"
 
 require "base64"
+require "set"
 
 module Entitlements
   class Backend
@@ -196,14 +197,56 @@ module Entitlements
             end
           end
 
-          added_members = desired_state.member_strings.map { |u| u.downcase } - current_state.member_strings.map { |u| u.downcase }
-          removed_members = current_state.member_strings.map { |u| u.downcase } - desired_state.member_strings.map { |u| u.downcase }
+          desired_team_members = Set.new(desired_state.member_strings.map { |u| u.downcase })
+          current_team_members = Set.new(current_state.member_strings.map { |u| u.downcase })
+
+          added_members = desired_team_members - current_team_members
+          removed_members = current_team_members - desired_team_members
 
           added_members.select! { |username| add_user_to_team(user: username, team: current_state) }
           removed_members.select! { |username| remove_user_from_team(user: username, team: current_state) }
 
+          added_maintainers = Set.new
+          removed_maintainers = Set.new
+          unless desired_metadata["team_maintainers"] == current_metadata["team_maintainers"]
+            if desired_metadata["team_maintainers"].nil?
+              # We will not delete ALL maintainers from a team and leave it without maintainers.
+              Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): IGNORING GitHub Team Maintainer DELETE"
+            else
+              desired_maintainers_str = desired_metadata["team_maintainers"] # not nil, we tested that above
+              desired_maintainers = Set.new(desired_maintainers_str.split(",").map { |u| u.strip.downcase })
+              unless desired_maintainers.subset?(desired_team_members)
+                maintainer_not_member = desired_maintainers - desired_team_members
+                Entitlements.logger.warn "sync_team(#{current_state.team_name}=#{current_state.team_id}): Maintainers must be a subset of team members. Desired maintainers: #{maintainer_not_member.to_a} are not members. Ignoring."
+                desired_maintainers = desired_maintainers.intersection(desired_team_members)
+              end
+
+              current_maintainers_str = current_metadata["team_maintainers"]
+              current_maintainers = Set.new(
+                current_maintainers_str.nil? ? [] : current_maintainers_str.split(",").map { |u| u.strip.downcase }
+              )
+              # We ignore any current maintainer who is not a member of the team according to the team spec
+              # This avoids messing with teams who have been manually modified to add a maintainer
+              current_maintainers = current_maintainers.intersection(desired_team_members)
+              added_maintainers = desired_maintainers - current_maintainers
+              removed_maintainers = current_maintainers - desired_maintainers
+              if added_maintainers.empty? && removed_maintainers.empty?
+                Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Textual change but no semantic change in maintainers. It is remains: #{current_maintainers.to_a}."
+              else
+                Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Maintainer members change found - From #{current_maintainers.to_a} to #{desired_maintainers.to_a}"
+                added_maintainers.select! { |username| add_user_to_team(user: username, team: current_state, role: "maintainer") }
+
+                ## We only touch previous maintainers who are actually still going to be members of the team
+                removed_maintainers = removed_maintainers.intersection(desired_team_members)
+                ## Downgrade membership to default (role: "member")
+                removed_maintainers.select! { |username| add_user_to_team(user: username, team: current_state, role: "member") }
+              end
+            end
+          end
+
+
           Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Added #{added_members.count}, removed #{removed_members.count}"
-          added_members.any? || removed_members.any? || changed_parent_team
+          added_members.any? || removed_members.any? || added_maintainers.any? || removed_maintainers.any? || changed_parent_team
         end
 
         # Create a team
@@ -366,17 +409,22 @@ module Entitlements
         #
         # user - String with the GitHub username
         # team - Entitlements::Backend::GitHubTeam::Models::Team object for the team.
+        # role - optional (default: "member") String with the role to assign to the user: either "member" or "maintainer"
         #
-        # Returns true if the user was added to the team, false if user was already on team.
+        # Returns true if the user was added to the team or role changed; false if user was already on team with same role
         Contract C::KeywordArgs[
           user: String,
           team: Entitlements::Backend::GitHubTeam::Models::Team,
+          role: C::Optional[String]
         ] => C::Bool
-        def add_user_to_team(user:, team:)
+        def add_user_to_team(user:, team:, role: "member")
           return false unless org_members.include?(user.downcase)
-          Entitlements.logger.debug "#{identifier} add_user_to_team(user=#{user}, org=#{org}, team_id=#{team.team_id})"
+          unless role == "member" || role == "maintainer"
+            raise "add_user_to_team role mismatch: team_id=#{team.team_id} user=#{user} expected role=maintainer/member got=#{role}"
+          end
+          Entitlements.logger.debug "#{identifier} add_user_to_team(user=#{user}, org=#{org}, team_id=#{team.team_id}, role=#{role})"
           validate_team_id_and_slug!(team.team_id, team.team_name)
-          result = octokit.add_team_membership(team.team_id, user)
+          result = octokit.add_team_membership(team.team_id, user, role: role)
           result[:state] == "active" || result[:state] == "pending"
         end
 
