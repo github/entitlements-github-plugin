@@ -420,6 +420,7 @@ module Entitlements
         def add_user_to_team(user:, team:, role: "member")
           return false unless org_members.include?(user.downcase)
           unless role == "member" || role == "maintainer"
+            # :nocov:
             raise "add_user_to_team role mismatch: team_id=#{team.team_id} user=#{user} expected role=maintainer/member got=#{role}"
           end
           Entitlements.logger.debug "#{identifier} add_user_to_team(user=#{user}, org=#{org}, team_id=#{team.team_id}, role=#{role})"
