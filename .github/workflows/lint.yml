@@ -14,12 +14,11 @@ jobs:
       contents: read
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@7884fcad6b5d53d10323aee724dc68d8b9096a2e # pin@v2
+      - name: checkout
+        uses: actions/checkout@v3
 
-      - uses: ruby/setup-ruby@8029ebd6e5bd8f4e0d6f7623ea76a01ec5b1010d # pin@v1.110.0
+      - uses: ruby/setup-ruby@250fcd6a742febb1123a77a841497ccaa8b9e939 # pin@v1.152.0
         with:
-          ruby-version: 3.1.2
           bundler-cache: true
 
       - name: rubocop
