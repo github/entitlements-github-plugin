@@ -127,7 +127,7 @@ module Entitlements
           # Create the new team and invalidate the cache
           if github_team.nil?
             team_name = entitlement_group.cn.downcase
-            github.create_team(entitlement_group: entitlement_group)
+            github.create_team(entitlement_group:)
             github.invalidate_predictive_cache(entitlement_group)
             @github_team_cache.delete(team_name)
             github_team = github.read_team(entitlement_group)
@@ -168,7 +168,7 @@ module Entitlements
             team_name: entitlement_group.cn.downcase,
             members: Set.new,
             ou: github.ou,
-            metadata: metadata
+            metadata:
           )
         end
 

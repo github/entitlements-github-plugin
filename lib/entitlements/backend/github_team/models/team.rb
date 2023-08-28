@@ -27,7 +27,7 @@ module Entitlements
             @team_id = team_id
             @team_name = team_name.downcase
             @team_dn = ["cn=#{team_name.downcase}", ou].join(",")
-            super(dn: @team_dn, members: Set.new(members.map { |m| m.downcase }), metadata: metadata)
+            super(dn: @team_dn, members: Set.new(members.map { |m| m.downcase }), metadata:)
           end
         end
       end

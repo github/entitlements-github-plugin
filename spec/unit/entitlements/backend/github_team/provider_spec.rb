@@ -19,8 +19,8 @@ describe Entitlements::Backend::GitHubTeam::Provider do
   let(:russian_blue) { Entitlements::Models::Person.new(uid: "russian_blue") }
   let(:members) { Set.new(%w[SnowShoe russian_blue]) }
   let(:dn) { "cn=cats,ou=Github,dc=github,dc=fake" }
-  let(:group) { Entitlements::Models::Group.new(dn: dn, description: ":smile_cat:", members: Set.new([snowshoe, russian_blue]), metadata: {"application_owner" => "russian_blue"}) }
-  let(:team) { Entitlements::Backend::GitHubTeam::Models::Team.new(team_id: 1001, team_name: "cats", members: members, ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake", metadata: {"application_owner" => "russian_blue"}) }
+  let(:group) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([snowshoe, russian_blue]), metadata: {"application_owner" => "russian_blue"}) }
+  let(:team) { Entitlements::Backend::GitHubTeam::Models::Team.new(team_id: 1001, team_name: "cats", members:, ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake", metadata: {"application_owner" => "russian_blue"}) }
   let(:member_strings_set) { Set.new(members.map(&:downcase)) }
   let(:subject) { described_class.new(config: provider_config) }
 
@@ -189,9 +189,9 @@ describe Entitlements::Backend::GitHubTeam::Provider do
   end
 
   describe "#change_ignored?" do
-    let(:group1) { Entitlements::Models::Group.new(dn: dn, description: ":smile_cat:", members: Set.new([snowshoe])) }
-    let(:group2) { Entitlements::Models::Group.new(dn: dn, description: ":smile_cat:", members: Set.new([russian_blue])) }
-    let(:action) { Entitlements::Models::Action.new(dn, group1, group2, "foo", ignored_users: ignored_users) }
+    let(:group1) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([snowshoe])) }
+    let(:group2) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([russian_blue])) }
+    let(:action) { Entitlements::Models::Action.new(dn, group1, group2, "foo", ignored_users:) }
 
     context "all adds/removes ignored" do
       let(:ignored_users) { Set.new([snowshoe, russian_blue].map(&:uid)) }
@@ -260,7 +260,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
 
       allow(subject).to receive(:github).and_return(github)
       expect(github).to receive(:read_team).with(entitlement_group).and_return(nil)
-      expect(github).to receive(:create_team).with({entitlement_group: entitlement_group}).and_return(true)
+      expect(github).to receive(:create_team).with({entitlement_group:}).and_return(true)
       expect(github).to receive(:invalidate_predictive_cache).with(entitlement_group).and_return(nil)
       expect(github).to receive(:read_team).with(entitlement_group).and_return(github_team)
       expect(github).to receive(:sync_team).with(entitlement_group, github_team).and_return(true)

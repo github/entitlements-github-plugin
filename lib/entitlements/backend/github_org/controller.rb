@@ -83,7 +83,7 @@ module Entitlements
           validate_no_dupes!       # calls read() for each group
 
           if changes.any?
-            print_differences(key: group_name, added: [], removed: [], changed: changes, ignored_users: ignored_users)
+            print_differences(key: group_name, added: [], removed: [], changed: changes, ignored_users:)
             @actions.concat(changes)
           else
             logger.debug "UNCHANGED: No GitHub organization changes for #{group_name}"
@@ -398,11 +398,11 @@ module Entitlements
               if removed.key?(member.downcase)
                 # Already removed from a previous role. Therefore this is a move to a different role.
                 removed.delete(member.downcase)
-                moved[member.downcase] = { member: member, role: role }
+                moved[member.downcase] = { member:, role: }
               else
                 # Not removed from a previous role. Suspect this is an addition to the org (if we later spot a removal
                 # from a role, then the code below will update that to be a move instead).
-                added[member.downcase] = { member: member, role: role }
+                added[member.downcase] = { member:, role: }
               end
             end
 
@@ -414,12 +414,12 @@ module Entitlements
               else
                 # Not added to a previous role. Suspect this is a removal from the org (if we later spot an addition
                 # to another role, then the code above will update that to be a move instead).
-                removed[member.downcase] = { member: member, role: role }
+                removed[member.downcase] = { member:, role: }
               end
             end
           end
 
-          { added: added, removed: removed, moved: moved }
+          { added:, removed:, moved: }
         end
 
         # Admins or members who are both `invited` and `pending` do not need to be re-invited. We're waiting for them

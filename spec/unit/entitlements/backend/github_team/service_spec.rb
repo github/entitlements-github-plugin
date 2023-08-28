@@ -523,7 +523,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
           }
         )
 
-      result = subject.send(:add_user_to_team, user: "blackmanx", team: team)
+      result = subject.send(:add_user_to_team, user: "blackmanx", team:)
       expect(result).to eq(true)
     end
 
@@ -546,7 +546,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
           }
         )
 
-      result = subject.send(:add_user_to_team, user: "blackmanx", team: team)
+      result = subject.send(:add_user_to_team, user: "blackmanx", team:)
       expect(result).to eq(true)
     end
 
@@ -569,14 +569,14 @@ describe Entitlements::Backend::GitHubTeam::Service do
           }
         )
 
-      result = subject.send(:add_user_to_team, user: "blackmanx", team: team)
+      result = subject.send(:add_user_to_team, user: "blackmanx", team:)
       expect(result).to eq(false)
     end
 
     it "returns false when the user is ignored" do
       expect(subject).to receive(:org_members).and_return(Set.new(%w[ragamuffin]))
 
-      result = subject.send(:add_user_to_team, user: "blackmanx", team: team)
+      result = subject.send(:add_user_to_team, user: "blackmanx", team:)
       expect(result).to eq(false)
     end
   end
@@ -598,14 +598,14 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(subject).to receive(:validate_team_id_and_slug!).with(1001, "russian-blues").and_return(true)
       expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
 
-      result = subject.send(:remove_user_from_team, user: "blackmanx", team: team)
+      result = subject.send(:remove_user_from_team, user: "blackmanx", team:)
       expect(result).to eq(true)
     end
 
     it "returns false when the user is ignored" do
       expect(subject).to receive(:org_members).and_return(Set.new(%w[ragamuffin]))
 
-      result = subject.send(:remove_user_from_team, user: "blackmanx", team: team)
+      result = subject.send(:remove_user_from_team, user: "blackmanx", team:)
       expect(result).to eq(false)
     end
   end

@@ -44,7 +44,7 @@ module Entitlements
         Contract String, String => C::Bool
         def add_user_to_organization(user, role)
           Entitlements.logger.debug "#{identifier} add_user_to_organization(user=#{user}, org=#{org}, role=#{role})"
-          new_membership = octokit.update_organization_membership(org, user: user, role: role)
+          new_membership = octokit.update_organization_membership(org, user:, role:)
 
           # Happy path
           if new_membership[:role] == role
@@ -70,7 +70,7 @@ module Entitlements
         Contract String => C::Bool
         def remove_user_from_organization(user)
           Entitlements.logger.debug "#{identifier} remove_user_from_organization(user=#{user}, org=#{org})"
-          result = octokit.remove_organization_membership(org, user: user)
+          result = octokit.remove_organization_membership(org, user:)
 
           # If we removed the user, remove them from the cache of members, so that any GitHub team
           # operations in this organization will ignore this user.

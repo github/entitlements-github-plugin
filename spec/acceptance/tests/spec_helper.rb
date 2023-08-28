@@ -64,7 +64,7 @@ def run(fixture_dir, args = [])
   command_parts = [binary, "--config-file", configfile] + args
   command = command_parts.map { |i| Shellwords.escape(i) }.join(" ")
   stdout, stderr, exitstatus = Open3.capture3(command)
-  OpenStruct.new({ stdout: stdout, stderr: stderr, exitstatus: exitstatus.exitstatus, success?: exitstatus.exitstatus == 0 })
+  OpenStruct.new({ stdout:, stderr:, exitstatus: exitstatus.exitstatus, success?: exitstatus.exitstatus == 0 })
 end
 
 def log(priority, pattern)
