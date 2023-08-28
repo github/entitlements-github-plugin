@@ -82,3 +82,13 @@ For example, if there were a file `github.com/github/teams/new-team.txt` with a 
 Entitlements configs can contain metadata which the plugin will use to make further configuration decisions.
 
 `metadata_parent_team_name` - when defined in an entitlements config, the defined team will be made the parent team of this GitHub.com Team.
+
+## Release 🚀
+
+To release a new version of this Gem, do the following:
+
+1. Update the version number in the [`lib/version.rb`](lib/version.rb) file
+2. Run `bundle install` to update the `Gemfile.lock` file with the new version
+3. Commit your changes, push them to GitHub, and open a PR
+
+Once your PR is approved and the changes are merged, a new release will be created automatically by the [`release.yml`](.github/workflows/release.yml) workflow. The latest version of the Gem will be published to the GitHub Package Registry.
