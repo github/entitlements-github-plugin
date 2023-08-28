@@ -340,6 +340,53 @@ describe Entitlements::Backend::GitHubTeam::Service do
       )
     end
 
+    let(:team_metadata_add_maintainer) do
+      Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 1001,
+        team_name: "russian-blues",
+        members: Set.new(%w[blackmanx ragamuffin MAINECOON]),
+        ou: "ou=kittensinc,dc=github,dc=com",
+        metadata: {
+          "parent_team_name" => "cuddly-kittens",
+          "team_maintainers" => "blackmanx,ragamuffin"
+        }
+      )
+    end
+    let(:team_metadata_maintainer_old) do
+      Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 1001,
+        team_name: "russian-blues",
+        members: Set.new(%w[blackmanx ragamuffin MAINECOON]),
+        ou: "ou=kittensinc,dc=github,dc=com",
+        metadata: {
+          "parent_team_name" => "cuddly-kittens",
+          "team_maintainers" => "ragamuffin"
+        }
+      )
+    end
+    let(:team_metadata_remove_all_maintainers) do
+      Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 1001,
+        team_name: "russian-blues",
+        members: Set.new(%w[blackmanx ragamuffin MAINECOON]),
+        ou: "ou=kittensinc,dc=github,dc=com",
+        metadata: {
+          "parent_team_name" => "cuddly-kittens",
+        }
+      )
+    end
+    let(:team_metadata_add_non_member_maintainer) do
+      Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 1001,
+        team_name: "russian-blues",
+        members: Set.new(%w[blackmanx ragamuffin MAINECOON]),
+        ou: "ou=kittensinc,dc=github,dc=com",
+        metadata: {
+          "parent_team_name" => "cuddly-kittens",
+          "team_maintainers" => "krukow,ragamuffin"
+        }
+      )
+    end
     let(:team_metadata_remove) do
       Entitlements::Backend::GitHubTeam::Models::Team.new(
         team_id: 1001,
@@ -399,6 +446,41 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
       result = subject.sync_team(team_metadata_add, team_data_old)
       expect(result).to eq(true)
+    end
+
+    it "returns true when there were metadata changes to add maintainer" do
+      allow(subject).to receive(:read_team).with(team_metadata_add_maintainer).and_return(team_metadata_maintainer_old)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Maintainer members change found - From \["ragamuffin"\] to \["blackmanx", \"ragamuffin\"\]/)
+      expect(subject).to receive(:add_user_to_team).with(user: "blackmanx", team: team_metadata_maintainer_old, role: "maintainer").and_return(true)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
+      result = subject.sync_team(team_metadata_add_maintainer, team_metadata_maintainer_old)
+      expect(result).to eq(true)
+    end
+
+    it "returns false when there were metadata changes to remove ALL maintainers" do
+      allow(subject).to receive(:read_team).with(team_metadata_remove_all_maintainers).and_return(team_metadata_maintainer_old)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): IGNORING GitHub Team Maintainer DELETE/)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
+      result = subject.sync_team(team_metadata_remove_all_maintainers, team_metadata_maintainer_old)
+      expect(result).to eq(false)
+    end
+
+    it "returns true when there were metadata changes to remove a maintainer" do
+      allow(subject).to receive(:read_team).with(team_metadata_maintainer_old).and_return(team_metadata_add_maintainer)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Maintainer members change found - From \["blackmanx", "ragamuffin"\] to \["ragamuffin"\]/)
+      expect(subject).to receive(:add_user_to_team).with(user: "blackmanx", team: team_metadata_maintainer_old, role: "member").and_return(true)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
+      result = subject.sync_team(team_metadata_maintainer_old, team_metadata_add_maintainer)
+      expect(result).to eq(true)
+    end
+
+    it "returns false when there were metadata changes to add maintainer who is NOT in the team" do
+      allow(subject).to receive(:read_team).with(team_metadata_add_non_member_maintainer).and_return(team_metadata_maintainer_old)
+      expect(logger).to receive(:warn).with(/sync_team\(russian-blues=1001\): Maintainers must be a subset of team members. Desired maintainers: \["krukow"\] are not members. Ignoring./)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Textual change but no semantic change in maintainers. It is remains: \["ragamuffin\"\]./)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
+      result = subject.sync_team(team_metadata_add_non_member_maintainer, team_metadata_maintainer_old)
+      expect(result).to eq(false)
     end
 
     # TODO: I'm hard-coding a block for deletes, for now. I'm doing that by making sure we dont set the desired parent_team_id to nil for teams where it is already set
