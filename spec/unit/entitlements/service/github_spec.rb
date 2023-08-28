@@ -99,7 +99,7 @@ describe Entitlements::Service::GitHub do
 
     context "when sourced from the cache" do
       it "returns true" do
-        cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil }, member_dn => { members: members, metadata: nil } }, invalid: Set.new }
+        cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil }, member_dn => { members:, metadata: nil } }, invalid: Set.new }
 
         expect(subject).not_to receive(:members_and_roles_from_rest)
 
@@ -116,7 +116,7 @@ describe Entitlements::Service::GitHub do
     let(:answer) { { "monalisa" => "ADMIN", "ocicat" => "MEMBER", "blackmanx" => "MEMBER", "toyger" => "MEMBER" } }
 
     it "invaliates the cache" do
-      cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil }, member_dn => { members: members, metadata: nil } }, invalid: Set.new }
+      cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil }, member_dn => { members:, metadata: nil } }, invalid: Set.new }
 
       # First load should read from the cache.
       expect(subject.org_members).to eq(answer.map { |k, v| [k, v.downcase] }.to_h)
@@ -214,8 +214,8 @@ describe Entitlements::Service::GitHub do
 
       it "returns the expected hash" do
         expect(subject).to receive(:octokit).and_return(octokit).twice
-        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return(admins.map { |login| { login: login } })
-        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: login } })
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return(admins.map { |login| { login: } })
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: } })
 
         result = subject.send(:members_and_roles_from_rest)
         expect(result).to eq({"ocicat"=>"MEMBER", "blackmanx"=>"MEMBER", "toyger"=>"MEMBER", "highlander"=>"MEMBER", "russianblue"=>"MEMBER", "ragamuffin"=>"MEMBER", "monalisa"=>"ADMIN", "peterbald"=>"MEMBER", "mainecoon"=>"MEMBER", "laperm"=>"MEMBER"})

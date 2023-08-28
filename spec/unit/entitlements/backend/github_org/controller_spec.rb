@@ -588,7 +588,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
       let(:answer2) { { "monalisa" => "ADMIN", "ragamuffin" => "ADMIN", "blackmanx" => "MEMBER", "toyger" => "MEMBER" } }
 
       it "invalidates the cache and consults the API" do
-        cache[:predictive_state] = { by_dn: { org1_admin_dn => { members: admins, metadata: nil }, org1_member_dn => { members: members, metadata: nil } }, invalid: Set.new }
+        cache[:predictive_state] = { by_dn: { org1_admin_dn => { members: admins, metadata: nil }, org1_member_dn => { members:, metadata: nil } }, invalid: Set.new }
 
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
           .with("foo-githuborg", {

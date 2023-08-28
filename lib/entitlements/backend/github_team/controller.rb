@@ -61,12 +61,12 @@ module Entitlements
             end
 
             if diff[:metadata] && diff[:metadata][:create_team]
-              added << Entitlements::Models::Action.new(team_slug, provider.read(group), group, group_name, ignored_users: ignored_users)
+              added << Entitlements::Models::Action.new(team_slug, provider.read(group), group, group_name, ignored_users:)
             else
-              changed << Entitlements::Models::Action.new(team_slug, provider.read(group), group, group_name, ignored_users: ignored_users)
+              changed << Entitlements::Models::Action.new(team_slug, provider.read(group), group, group_name, ignored_users:)
             end
           end
-          print_differences(key: group_name, added: added, removed: [], changed: changed)
+          print_differences(key: group_name, added:, removed: [], changed:)
 
           @actions = added + changed
         end

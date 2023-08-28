@@ -28,6 +28,7 @@ services:
     volumes:
       - "${DIR}/spec/acceptance:/acceptance:ro"
       - "${DIR}/spec/acceptance/git-server/keys:/git-server/keys:ro"
+
   ldap-server:
     entrypoint: /acceptance/ldap-server/run-server.sh
     image: osixia/openldap:1.2.2
@@ -39,6 +40,7 @@ services:
       - "127.0.0.1:636:636"
     volumes:
       - "${DIR}/spec/acceptance:/acceptance:ro"
+
   github-server:
     build:
       context: "${DIR}/spec/acceptance/github-server"
@@ -49,7 +51,6 @@ services:
           - github.fake
     ports:
       - "127.0.0.1:443:443"
+      - "127.0.0.1:80:80"
     volumes:
       - "${DIR}/spec/acceptance:/acceptance:ro"
-    ports:
-      - "127.0.0.1:80:80"

@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
+require_relative "lib/version"
+
 Gem::Specification.new do |s|
   s.name = "entitlements-github-plugin"
-  s.version = File.read("VERSION").chomp
+  s.version = Entitlements::Version::VERSION
   s.summary = "GitHub dotcom provider for entitlements-app"
-  s.description = ""
+  s.description = "Entitlements plugin to manage GitHub Orgs and Team memberships and access"
   s.authors = ["GitHub, Inc. Security Ops"]
   s.email = "security@github.com"
   s.license = "MIT"
-  s.files = Dir.glob("lib/**/*") + %w[VERSION]
+  s.files = Dir.glob("lib/**/*")
   s.homepage = "https://github.com/github/entitlements-github-plugin"
   s.executables = %w[]
 

@@ -78,7 +78,7 @@ module Entitlements
                 team_id: -1,
                 team_name: team_identifier,
                 members: cached_members,
-                ou: ou,
+                ou:,
                 metadata: team_metadata
               )
 
@@ -108,7 +108,7 @@ module Entitlements
                   team_id: teamdata[:team_id],
                   team_name: team_identifier,
                   members: Set.new(teamdata[:members]),
-                  ou: ou,
+                  ou:,
                   metadata: team_metadata
                 )
               rescue TeamNotFound
@@ -380,7 +380,7 @@ module Entitlements
             break
           end
 
-          { members: result, team_id: team_id, parent_team_name: parent_team_name }
+          { members: result, team_id:, parent_team_name: }
         end
 
         # Ensure that the given team ID actually matches up to the team slug on GitHub. This is in place
@@ -425,7 +425,7 @@ module Entitlements
           end
           Entitlements.logger.debug "#{identifier} add_user_to_team(user=#{user}, org=#{org}, team_id=#{team.team_id}, role=#{role})"
           validate_team_id_and_slug!(team.team_id, team.team_name)
-          result = octokit.add_team_membership(team.team_id, user, role: role)
+          result = octokit.add_team_membership(team.team_id, user, role:)
           result[:state] == "active" || result[:state] == "pending"
         end
 

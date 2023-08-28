@@ -82,7 +82,7 @@ module Entitlements
           member_count = result.count { |_, role| role == "member" }
           Entitlements.logger.debug "Currently #{org} has #{admin_count} admin(s) and #{member_count} member(s)"
 
-          { cache: cache, value: result }
+          { cache:, value: result }
         end
 
         Entitlements.cache[:github_org_members][org_signature][:value]
@@ -354,9 +354,9 @@ module Entitlements
             data = JSON.parse(response.body)
             if data.key?("errors")
               Entitlements.logger.error "Errors reported: #{data['errors'].inspect}"
-              return { code: 500, data: data }
+              return { code: 500, data: }
             end
-            { code: response.code.to_i, data: data }
+            { code: response.code.to_i, data: }
           rescue JSON::ParserError => e
             Entitlements.logger.error "#{e.class} #{e.message}: #{response.body.inspect}"
             { code: 500, data: { "body" => response.body } }
