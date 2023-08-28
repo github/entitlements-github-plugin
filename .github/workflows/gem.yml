@@ -1,30 +1,53 @@
-name: Publish and Release Gem
+name: release
+
 on:
-  push:
-    branches: [ $default-branch ]
-    paths: [ "VERSION" ]
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - lib/version.rb
+
+permissions:
+  contents: write
+  packages: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+      - name: checkout
+        uses: actions/checkout@v3
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@8a45918450651f5e4784b6031db26f4b9f76b251
+      - uses: ruby/setup-ruby@250fcd6a742febb1123a77a841497ccaa8b9e939 # pin@v1.152.0
         with:
           bundler-cache: true
 
-      - name: Run Tests
+      - name: bootstrap
+        run: script/bootstrap
+
+      - name: lint
+        run: bundle exec rubocop -c .rubocop.yml lib/ spec/
+
+      - name: test
         run: script/test
 
-      - name: Build Gem
-        run: |
-          echo "GEM_VERSION=$(gem build entitlements-github-plugin.gemspec 2>&1 | grep Version | cut -d':' -f 2 | tr -d " \t\n\r")" >> $GITHUB_ENV
+      - name: set GEM_NAME from gemspec
+        run: echo "GEM_NAME=$(ls | grep gemspec | cut -d. -f1)" >> $GITHUB_ENV
 
-      - name: Publish to GitHub Packages
+        # builds the gem and saves the version to GITHUB_ENV
+      - name: build
+        run: echo "GEM_VERSION=$(gem build ${{ env.GEM_NAME }}.gemspec 2>&1 | grep Version | cut -d':' -f 2 | tr -d " \t\n\r")" >> $GITHUB_ENV
+
+      - name: publish to GitHub packages
         run: |
-          GEM_HOST_API_KEY=${{ secrets.GITHUB_TOKEN }} gem push --KEY github --host https://rubygems.pkg.github.com/github entitlements-github-plugin-${{ env.GEM_VERSION }}.gem
+          export OWNER=$( echo ${{ github.repository }} | cut -d "/" -f 1 )
+          GEM_HOST_API_KEY=${{ secrets.GITHUB_TOKEN }} gem push --KEY github --host https://rubygems.pkg.github.com/${OWNER} ${{ env.GEM_NAME }}-${{ env.GEM_VERSION }}.gem
+
+      - name: release
+        uses: ncipollo/release-action@a2e71bdd4e7dab70ca26a852f29600c98b33153e # pin@v1.12.0
+        with:
+          artifacts: "${{ env.GEM_NAME }}-${{ env.GEM_VERSION }}.gem"
+          tag: "v${{ env.GEM_VERSION }}"
+          generateReleaseNotes: true
