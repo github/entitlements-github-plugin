@@ -91,4 +91,4 @@ To release a new version of this Gem, do the following:
 2. Run `bundle install` to update the `Gemfile.lock` file with the new version
 3. Commit your changes, push them to GitHub, and open a PR
 
-Once your PR is approved and the changes are merged, a new release will be created automatically by the [`release.yml`](.github/workflows/release.yml) workflow. The latest version of the Gem will be published to the GitHub Package Registry.
+Once your PR is approved and the changes are merged, a new release will be created automatically by the [`release.yml`](.github/workflows/release.yml) workflow. The latest version of the Gem will be published to the GitHub Package Registry and RubyGems.
