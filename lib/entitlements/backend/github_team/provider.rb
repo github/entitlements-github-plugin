@@ -198,6 +198,23 @@ module Entitlements
               Entitlements.logger.info "CHANGE github_parent_team from #{existing_parent_team} to #{changed_parent_team} for #{existing_group.dn} in #{github.org}"
             end
           end
+
+          existing_maintainers = existing_group.metadata_fetch_if_exists("team_maintainers")
+          changed_maintainers = group.metadata_fetch_if_exists("team_maintainers")
+          if existing_maintainers != changed_maintainers
+            base_diff[:metadata] ||= {}
+            if existing_maintainers.nil? && !changed_maintainers.nil?
+              base_diff[:metadata][:team_maintainers] = "add"
+              Entitlements.logger.info "ADD github_team_maintainers #{changed_maintainers} to #{existing_group.dn} in #{github.org}"
+            elsif !existing_maintainers.nil? && changed_maintainers.nil?
+              base_diff[:metadata][:team_maintainers] = "remove"
+              Entitlements.logger.info "REMOVE (NOOP) github_team_maintainers #{existing_maintainers} from #{existing_group.dn} in #{github.org}"
+            else
+              base_diff[:metadata][:team_maintainers] = "change"
+              Entitlements.logger.info "CHANGE github_team_maintainers from #{existing_maintainers} to #{changed_maintainers} for #{existing_group.dn} in #{github.org}"
+            end
+          end
+
           base_diff
         end
 

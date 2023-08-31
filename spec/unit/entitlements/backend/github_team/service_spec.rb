@@ -79,7 +79,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       graphql_response = '{"data":{"organization":{"team":null}}}'
       stub_request(:post, "https://github.fake/api/v3/graphql").
         with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"team-does-not-exist\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"team-does-not-exist\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response)
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -92,7 +92,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object when the team exists" do
       stub_request(:post, "https://github.fake/api/v3/graphql").
         with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -109,7 +109,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists" do
       stub_request(:post, "https://github.fake/api/v3/graphql").
         with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100, parent_team: "parent-cats"))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -128,7 +128,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists but has empty entitlement metadata" do
       stub_request(:post, "https://github.fake/api/v3/graphql").
         with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens_no_metadata, 0, 100, parent_team: "parent-cats"))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -225,7 +225,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "returns false" do
         cache[:predictive_state] = { by_dn: {}, invalid: Set.new }
 
-        expect(subject).to receive(:graphql_team_data).and_return(members: people.to_a, team_id: 1234567)
+        expect(subject).to receive(:graphql_team_data).and_return(members: people.to_a, team_id: 1234567, roles: Hash[*people.collect { |u| [u, "member"] }.flatten])
         expect(logger).to receive(:debug).with("members(#{team_dn}): DN does not exist in cache")
         expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
 
@@ -256,7 +256,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       # Invalidating cache should force a re-read.
       people_2 = Set.new(people + %w[peterbald])
-      expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(members: people_2.to_a, team_id: 1234567)
+      expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(members: people_2.to_a, team_id: 1234567, roles: Hash[*people_2.collect { |u| [u, "member"] }.flatten])
       expect(logger).to receive(:debug).with("Invalidating cache entry for #{team_dn}")
       expect(logger).to receive(:debug).with("members(#{team_dn}): DN has been marked invalid in cache")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
@@ -632,24 +632,26 @@ describe Entitlements::Backend::GitHubTeam::Service do
     context "team found, single page of results" do
       let(:graphql_dotcom_response) do
         <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
+{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
         EOF
       end
 
       it "parses team data from a single page of results" do
         stub_request(:post, "https://github.fake/api/v3/graphql").
           with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\ncursor\\n}\\n}\\n}\\n}\\n}\"}",
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}",
           headers: {
             "Authorization" => "bearer GoPackGo",
             "Content-Type"  => "application/json",
           }).to_return(status: 200, body: graphql_dotcom_response)
 
          result = subject.send(:graphql_team_data, "grumpy-cat")
+         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
          expect(result).to eq(
-           members: ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"],
+           members:,
            team_id: 593721,
-           parent_team_name: nil
+           parent_team_name: nil,
+           roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
          )
       end
     end
@@ -659,19 +661,19 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       let(:graphql_dotcom_response_1) do
         <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="}]}}}}}
+{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_2) do
         <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"hubot"},"cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="}]}}}}}
+{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_3) do
         <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"ragamuffin"},"cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
+{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
         EOF
       end
 
@@ -684,10 +686,12 @@ describe Entitlements::Backend::GitHubTeam::Service do
           )
 
          result = subject.send(:graphql_team_data, "grumpy-cat")
+         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
          expect(result).to eq(
-           members: ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"],
+           members:,
            team_id: 593721,
-           parent_team_name: nil
+           parent_team_name: nil,
+           roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
          )
       end
     end
@@ -697,13 +701,13 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       let(:graphql_dotcom_response_1) do
         <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="}]}}}}}
+{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_2) do
         <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"korat"},"cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
+{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
         EOF
       end
 
@@ -722,10 +726,12 @@ describe Entitlements::Backend::GitHubTeam::Service do
           )
 
          result = subject.send(:graphql_team_data, "grumpy-cat")
+         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
          expect(result).to eq(
-           members: ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"],
+           members:,
            team_id: 593721,
-           parent_team_name: nil
+           parent_team_name: nil,
+           roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
          )
       end
     end

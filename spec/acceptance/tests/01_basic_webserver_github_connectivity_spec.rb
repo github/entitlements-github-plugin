@@ -51,6 +51,7 @@ describe Entitlements do
                 node {
                   login
                 }
+                role
                 cursor
               }
             },
@@ -78,13 +79,13 @@ describe Entitlements do
                 "databaseId" => 6,
                 "members" => {
                   "edges" => [
-                    { "node" => { "login" => "cheetoh" }, "cursor" => "Y2hlZXRvaA==" },
-                    { "node" => { "login" => "khaomanee" }, "cursor" => "a2hhb21hbmVl" },
-                    { "node" => { "login" => "nebelung" }, "cursor" => "bmViZWx1bmc=" },
-                    { "node" => { "login" => "ojosazules" }, "cursor" => "b2pvc2F6dWxlcw==" }
+                    { "node" => { "login" => "cheetoh" }, "role" => "MEMBER", "cursor" => "Y2hlZXRvaA==" },
+                    { "node" => { "login" => "khaomanee" }, "role" => "MEMBER", "cursor" => "a2hhb21hbmVl" },
+                    { "node" => { "login" => "nebelung" }, "role" => "MEMBER", "cursor" => "bmViZWx1bmc=" },
+                    { "node" => { "login" => "ojosazules" }, "role" => "MEMBER", "cursor" => "b2pvc2F6dWxlcw==" }
                   ]
                 },
-                "parentTeam" => { "slug" => nil }
+                "parentTeam" => { "slug" => nil },
               }
             }
           }

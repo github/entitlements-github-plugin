@@ -73,7 +73,7 @@ class FakeGitHubApi < Sinatra::Base
       cursor_flag = cursor.nil?
       members.each do |m|
         next if !cursor_flag && Base64.strict_encode64(m) != cursor
-        edges << { "node" => { "login" => m }, "cursor" => Base64.strict_encode64(m) } if cursor_flag
+        edges << { "node" => { "login" => m }, "role" => "MEMBER", "cursor" => Base64.strict_encode64(m) } if cursor_flag
         cursor_flag = true
         break if edges.size >= first
       end
