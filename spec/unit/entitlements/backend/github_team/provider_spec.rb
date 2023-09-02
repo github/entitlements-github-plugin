@@ -140,7 +140,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         expect(logger).to receive(:debug).with("Loaded cn=grumpy-cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake (id=1001) with 3 member(s)")
 
         allow(subject).to receive(:github).and_return(github)
-        expect(github).to receive(:graphql_team_data).with(team_identifier).and_return(members: old_members, team_id: 1001, parent_team_name: nil)
+        expect(github).to receive(:graphql_team_data).with(team_identifier).and_return(members: old_members, team_id: 1001, parent_team_name: nil, roles: Hash[*old_members.collect { |u| [u, "member"] }.flatten])
 
         expect(subject.diff(group)).to eq(empty_result)
       end
@@ -153,7 +153,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         cache[:predictive_state] = { by_dn: { team_dn => { members: old_members, metadata: nil } }, invalid: Set.new }
 
         allow(subject).to receive(:github).and_return(github)
-        expect(github).to receive(:graphql_team_data).with(team_identifier).and_return(members: old_members, team_id: 1001, parent_team_name: nil)
+        expect(github).to receive(:graphql_team_data).with(team_identifier).and_return(members: old_members, team_id: 1001, parent_team_name: nil, roles: Hash[*old_members.collect { |u| [u, "member"] }.flatten])
 
         expect(subject.diff(group)).to eq(added: Set.new(%w[mainecoon]), removed: Set.new(%w[russianblue]))
       end
@@ -358,6 +358,75 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         added: Set.new,
         removed: Set.new,
         metadata: { parent_team: "remove" }
+      )
+    end
+
+    it "diffs team maintainers change" do
+      entitlements_group = Entitlements::Models::Group.new(
+        dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        metadata: { "team_maintainers" => "cuddles" }
+      )
+
+      github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 2222,
+        team_name: "diff-cats",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        metadata: { "team_maintainers" => "cuddles,fluffy" }
+      )
+
+      result = subject.diff_existing_updated(entitlements_group, github_team)
+      expect(result).to eq(
+        added: Set.new,
+        removed: Set.new,
+        metadata: { team_maintainers: "change" }
+      )
+    end
+
+    it "diffs team maintainers add" do
+      entitlements_group = Entitlements::Models::Group.new(
+        dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        metadata: { }
+      )
+
+      github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 2222,
+        team_name: "diff-cats",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        metadata: { "team_maintainers" => "cuddles,fluffy" }
+      )
+
+      result = subject.diff_existing_updated(entitlements_group, github_team)
+      expect(result).to eq(
+        added: Set.new,
+        removed: Set.new,
+        metadata: { team_maintainers: "add" }
+      )
+    end
+
+    it "diffs team maintainers removal" do
+      entitlements_group = Entitlements::Models::Group.new(
+        dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        metadata: { "team_maintainers" => "cuddles,fluffy" }
+      )
+
+      github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 2222,
+        team_name: "diff-cats",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        metadata: { }
+      )
+
+      result = subject.diff_existing_updated(entitlements_group, github_team)
+      expect(result).to eq(
+        added: Set.new,
+        removed: Set.new,
+        metadata: { team_maintainers: "remove" }
       )
     end
   end

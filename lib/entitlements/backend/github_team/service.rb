@@ -104,6 +104,10 @@ module Entitlements
                   end
                 end
 
+                maintainers = teamdata[:members].select { |u| teamdata[:roles][u] == "maintainer" }
+                team_metadata = team_metadata || {}
+                team_metadata = team_metadata.merge({"team_maintainers" => maintainers.any? ? maintainers.join(",") : nil})
+
                 team = Entitlements::Backend::GitHubTeam::Models::Team.new(
                   team_id: teamdata[:team_id],
                   team_name: team_identifier,
@@ -326,11 +330,12 @@ module Entitlements
         # team_slug - Identifier of the team to retrieve.
         #
         # Returns a data structure with team data.
-        Contract String => { members: C::ArrayOf[String], team_id: Integer, parent_team_name: C::Or[String, nil] }
+        Contract String => { members: C::ArrayOf[String], team_id: Integer, parent_team_name: C::Or[String, nil], roles: C::HashOf[String => String] }
         def graphql_team_data(team_slug)
           cursor = nil
           team_id = nil
           result = []
+          roles = {}
           sanity_counter = 0
 
           while sanity_counter < 100
@@ -348,6 +353,7 @@ module Entitlements
                       node {
                         login
                       }
+                      role
                       cursor
                     }
                   }
@@ -375,12 +381,17 @@ module Entitlements
             buffer = edges.map { |e| e.fetch("node").fetch("login").downcase }
             result.concat buffer
 
+            edges.each do |e|
+              role = e.fetch("role").downcase
+              roles[e.fetch("node").fetch("login").downcase] = role
+            end
+
             cursor = edges.last.fetch("cursor")
             next if cursor && buffer.size == max_graphql_results
             break
           end
 
-          { members: result, team_id:, parent_team_name: }
+          { members: result, team_id:, parent_team_name:, roles: }
         end
 
         # Ensure that the given team ID actually matches up to the team slug on GitHub. This is in place
