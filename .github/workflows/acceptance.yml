@@ -17,7 +17,7 @@ jobs:
       has_change: ${{ steps.diff.outputs.has_change}}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - id: fetch-base
         if: github.event_name == 'pull_request'
