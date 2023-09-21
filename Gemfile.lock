@@ -1,8 +1,8 @@
 PATH
   remote: .
   specs:
-    entitlements-github-plugin (0.4.2)
-      contracts (= 0.17.0)
+    entitlements-github-plugin (0.4.3)
+      contracts (~> 0.17.0)
       faraday (~> 2.0)
       faraday-retry (~> 2.0)
       octokit (~> 4.25)
@@ -118,19 +118,19 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  entitlements (= 0.2.0)
+  entitlements (~> 0.2.0)
   entitlements-github-plugin!
-  rake (= 13.0.6)
-  rspec (= 3.8.0)
-  rspec-core (= 3.8.0)
-  rubocop (= 1.29.1)
-  rubocop-github (= 0.17.0)
-  rubocop-performance (= 1.13.3)
-  rugged (= 0.27.5)
-  simplecov (= 0.16.1)
-  simplecov-erb (= 1.0.1)
-  vcr (= 4.0.0)
-  webmock (= 3.4.2)
+  rake (~> 13.0.6)
+  rspec (~> 3.8.0)
+  rspec-core (~> 3.8.0)
+  rubocop (~> 1.29.1)
+  rubocop-github (~> 0.17.0)
+  rubocop-performance (~> 1.13.3)
+  rugged (~> 0.27.5)
+  simplecov (~> 0.16.1)
+  simplecov-erb (~> 1.0.1)
+  vcr (~> 4.0.0)
+  webmock (~> 3.4.2)
 
 BUNDLED WITH
    2.3.19
