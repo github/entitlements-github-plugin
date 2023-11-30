@@ -7,10 +7,12 @@
             "node": {
               "login": "peterbald"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEN"
+            "role": "MEMBER"
           }
-        ]
+        ],
+        "pageInfo": {
+          "endCursor": "Y3Vyc29yOnYyOpEN"
+        }
       }
     }
   }

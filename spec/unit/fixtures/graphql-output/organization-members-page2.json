@@ -7,24 +7,24 @@
             "node": {
               "login": "toyger"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEH"
+            "role": "MEMBER"
           },
           {
             "node": {
               "login": "highlander"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEI"
+            "role": "MEMBER"
           },
           {
             "node": {
               "login": "RussianBlue"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEJ"
+            "role": "MEMBER"
           }
-        ]
+        ],
+        "pageInfo": {
+          "endCursor": "Y3Vyc29yOnYyOpEJ"
+        }
       }
     }
   }

@@ -7,24 +7,24 @@
             "node": {
               "login": "monalisa"
             },
-            "role": "ADMIN",
-            "cursor": "Y3Vyc29yOnYyOpEB"
+            "role": "ADMIN"
           },
           {
             "node": {
               "login": "ocicat"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEF"
+            "role": "MEMBER"
           },
           {
             "node": {
               "login": "blackmanx"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEG"
+            "role": "MEMBER"
           }
-        ]
+        ],
+        "pageInfo": {
+          "endCursor": "Y3Vyc29yOnYyOpEG"
+        }
       }
     }
   }

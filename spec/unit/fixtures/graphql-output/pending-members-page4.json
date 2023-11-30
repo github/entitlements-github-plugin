@@ -6,10 +6,12 @@
           {
             "node": {
               "login": "blackmanx"
-            },
-            "cursor": "Y3Vyc29yOnYyOpEN"
+            }
           }
-        ]
+        ],
+        "pageInfo": {
+          "endCursor": "Y3Vyc29yOnYyOpEN"
+        }
       }
     }
   }

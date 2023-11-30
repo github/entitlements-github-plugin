@@ -7,24 +7,24 @@
             "node": {
               "login": "ragamuffin"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEK"
+            "role": "MEMBER"
           },
           {
             "node": {
               "login": "mainecoon"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEL"
+            "role": "MEMBER"
           },
           {
             "node": {
               "login": "laperm"
             },
-            "role": "MEMBER",
-            "cursor": "Y3Vyc29yOnYyOpEM"
+            "role": "MEMBER"
           }
-        ]
+        ],
+        "pageInfo": {
+          "endCursor": "Y3Vyc29yOnYyOpEM"
+        }
       }
     }
   }
