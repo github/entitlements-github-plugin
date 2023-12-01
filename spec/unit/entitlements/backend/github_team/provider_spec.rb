@@ -429,6 +429,28 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         metadata: { team_maintainers: "remove" }
       )
     end
+
+    it "diffs team maintainers no change" do
+      entitlements_group = Entitlements::Models::Group.new(
+        dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        metadata: { "team_maintainers" => "cuddles,Fluffy" }
+      )
+
+      github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 2222,
+        team_name: "diff-cats",
+        members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        metadata: { "team_maintainers" => "cuddles,fluffy" }
+      )
+
+      result = subject.diff_existing_updated(entitlements_group, github_team)
+      expect(result).to eq(
+        added: Set.new,
+        removed: Set.new,
+      )
+    end
   end
 
   describe "#create_github_team_group" do
