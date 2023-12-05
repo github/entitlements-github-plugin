@@ -113,9 +113,11 @@ class FakeGitHubApi < Sinatra::Base
 
     edges = []
     cursor_flag = cursor.nil?
+    end_cursor = nil
     result.each do |user, role|
-      next if !cursor_flag && Base64.strict_encode64(user) != cursor
-      edges << { "node" => { "login" => user }, "role" => role, "cursor" => Base64.strict_encode64(user) } if cursor_flag
+      end_cursor = Base64.strict_encode64(user)
+      next if !cursor_flag && end_cursor != cursor
+      edges << { "node" => { "login" => user }, "role" => role} if cursor_flag
       cursor_flag = true
       break if edges.size >= first
     end
@@ -123,7 +125,10 @@ class FakeGitHubApi < Sinatra::Base
     {
       "organization" => {
         "membersWithRole" => {
-          "edges" => edges
+          "edges" => edges,
+          "pageInfo" => {
+              "endCursor" => end_cursor
+          }
         }
       }
     }
@@ -144,9 +149,11 @@ class FakeGitHubApi < Sinatra::Base
 
     edges = []
     cursor_flag = cursor.nil?
+    end_cursor = nil
     result.each do |user|
-      next if !cursor_flag && Base64.strict_encode64(user) != cursor
-      edges << { "node" => { "login" => user }, "cursor" => Base64.strict_encode64(user) } if cursor_flag
+      end_cursor = Base64.strict_encode64(user)
+      next if !cursor_flag && end_cursor != cursor
+      edges << { "node" => { "login" => user } } if cursor_flag
       cursor_flag = true
       break if edges.size >= first
     end
@@ -154,7 +161,10 @@ class FakeGitHubApi < Sinatra::Base
     {
       "organization" => {
         "pendingMembers" => {
-          "edges" => edges
+          "edges" => edges,
+          "pageInfo" => {
+              "endCursor" => end_cursor
+          }
         }
       }
     }

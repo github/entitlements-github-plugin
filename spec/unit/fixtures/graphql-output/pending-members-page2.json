@@ -6,22 +6,22 @@
           {
             "node": {
               "login": "DAVID"
-            },
-            "cursor": "Y3Vyc29yOnYyOpEH"
+            }
           },
           {
             "node": {
               "login": "edward"
-            },
-            "cursor": "Y3Vyc29yOnYyOpEI"
+            }
           },
           {
             "node": {
               "login": "frank"
-            },
-            "cursor": "Y3Vyc29yOnYyOpEJ"
+            }
           }
-        ]
+        ],
+        "pageInfo": {
+          "endCursor": "Y3Vyc29yOnYyOpEJ"
+        }
       }
     }
   }
