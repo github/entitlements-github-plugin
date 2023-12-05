@@ -199,8 +199,8 @@ module Entitlements
             end
           end
 
-          existing_maintainers = existing_group.metadata_fetch_if_exists("team_maintainers")
-          changed_maintainers = group.metadata_fetch_if_exists("team_maintainers")
+          existing_maintainers = existing_group.metadata_fetch_if_exists("team_maintainers")&.downcase
+          changed_maintainers = group.metadata_fetch_if_exists("team_maintainers")&.downcase
           if existing_maintainers != changed_maintainers
             base_diff[:metadata] ||= {}
             if existing_maintainers.nil? && !changed_maintainers.nil?
