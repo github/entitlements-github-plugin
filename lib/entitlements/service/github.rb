@@ -210,8 +210,8 @@ module Entitlements
                     login
                   }
                   role
-                  cursor
                 }
+                pageInfo { endCursor }
               }
             }
           }".gsub(/\n\s+/, "\n")
@@ -222,14 +222,15 @@ module Entitlements
             raise "GraphQL query failure"
           end
 
-          edges = response[:data].fetch("data").fetch("organization").fetch("membersWithRole").fetch("edges")
+          membersWithRole = response[:data].fetch("data").fetch("organization").fetch("membersWithRole")
+          edges = membersWithRole.fetch("edges")
           break unless edges.any?
 
           edges.each do |edge|
             result[edge.fetch("node").fetch("login").downcase] = edge.fetch("role")
           end
 
-          cursor = edges.last.fetch("cursor")
+          cursor = membersWithRole.fetch("pageInfo").fetch("endCursor")
           next if cursor && edges.size == max_graphql_results
           break
         end
@@ -276,8 +277,8 @@ module Entitlements
                   node {
                     login
                   }
-                  cursor
                 }
+                pageInfo { endCursor }
               }
             }
           }".gsub(/\n\s+/, "\n")
@@ -288,14 +289,15 @@ module Entitlements
             raise "GraphQL query failure"
           end
 
-          edges = response[:data].fetch("data").fetch("organization").fetch("pendingMembers").fetch("edges")
+          pendingMembers = response[:data].fetch("data").fetch("organization").fetch("pendingMembers")
+          edges = pendingMembers.fetch("edges")
           break unless edges.any?
 
           edges.each do |edge|
             result.add(edge.fetch("node").fetch("login").downcase)
           end
 
-          cursor = edges.last.fetch("cursor")
+          cursor = pendingMembers.fetch("pageInfo").fetch("endCursor")
           next if cursor && edges.size == max_graphql_results
           break
         end
