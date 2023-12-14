@@ -44,7 +44,15 @@ module Entitlements
         Contract String, String => C::Bool
         def add_user_to_organization(user, role)
           Entitlements.logger.debug "#{identifier} add_user_to_organization(user=#{user}, org=#{org}, role=#{role})"
-          new_membership = octokit.update_organization_membership(org, user:, role:)
+
+          begin
+            new_membership = octokit.update_organization_membership(org, user:, role:)
+          rescue Octokit::NotFound => e
+            raise e unless ignore_not_found
+
+            Entitlements.logger.warn "User #{user} not found in GitHub instance #{identifier}, ignoring."
+            return false
+          end
 
           # Happy path
           if new_membership[:role] == role

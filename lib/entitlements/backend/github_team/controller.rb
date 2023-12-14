@@ -110,7 +110,8 @@ module Entitlements
             "base"  => { required: true, type: String },
             "addr"  => { required: false, type: String },
             "org"   => { required: true, type: String },
-            "token" => { required: true, type: String }
+            "token" => { required: true, type: String },
+            "ignore_not_found" => { required: false, type: [FalseClass, TrueClass] },
           })
           text = "GitHub group #{key.inspect}"
           Entitlements::Util::Util.validate_attr!(spec, data, text)

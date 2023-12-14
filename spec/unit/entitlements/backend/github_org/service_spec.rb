@@ -11,7 +11,8 @@ describe Entitlements::Backend::GitHubOrg::Service do
       addr: "https://github.fake/api/v3",
       org: "kittensinc",
       token: "GoPackGo",
-      ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake"
+      ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+      ignore_not_found: false
     )
   end
 
@@ -147,6 +148,58 @@ describe Entitlements::Backend::GitHubOrg::Service do
 
         result = subject.send(:add_user_to_organization, "bob", "admin")
         expect(result).to eq(false)
+      end
+
+      context "ignore_not_found is false" do
+        it "raises when user is not found" do
+          expect(logger).to receive(:debug).with("github.fake add_user_to_organization(user=bob, org=kittensinc, role=admin)")
+          expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
+
+          stub_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
+            status: 404,
+            headers: {
+              "Content-type" => "application/json"
+            },
+            body: JSON.generate({
+              "message"           => "Not Found",
+              "documentation_url" => "https://docs.github.com/rest"
+            })
+          )
+
+          expect { subject.send(:add_user_to_organization, "bob", "admin") }.to raise_error(Octokit::NotFound)
+        end
+      end
+
+      context "ignore_not_found is true" do
+        let(:subject) do
+          described_class.new(
+            addr: "https://github.fake/api/v3",
+            org: "kittensinc",
+            token: "GoPackGo",
+            ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+            ignore_not_found: true
+          )
+        end
+
+        it "ignores 404s" do
+          expect(logger).to receive(:debug).with("github.fake add_user_to_organization(user=bob, org=kittensinc, role=admin)")
+          expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
+          expect(logger).to receive(:warn).with("User bob not found in GitHub instance github.fake, ignoring.")
+  
+          stub_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
+            status: 404,
+            headers: {
+              "Content-type" => "application/json"
+            },
+            body: JSON.generate({
+              "message"           => "Not Found",
+              "documentation_url" => "https://docs.github.com/rest"
+            })
+          )
+  
+          result = subject.send(:add_user_to_organization, "bob", "admin")
+          expect(result).to eq(false)
+        end
       end
     end
   end

@@ -11,7 +11,8 @@ describe Entitlements::Backend::GitHubTeam::Controller do
       "org"   => "kittensinc",
       "token" => "CuteAndCuddlyKittens",
       "type"  => "github_team",
-      "base"  => "ou=kittensinc,ou=GitHub,dc=github,dc=com"
+      "base"  => "ou=kittensinc,ou=GitHub,dc=github,dc=com",
+      "ignore_not_found" => false
     }
   end
   let(:group_name) { "foo-githubteam" }
@@ -110,7 +111,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
 
      it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens"})
+          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
           .and_return(Set.new(%w[snowshoes russian-blues]))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("snowshoes").and_return(snowshoe_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("russian-blues").and_return(russian_blue_group)
@@ -158,7 +159,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
 
       it "does not run actions if there are no diffs detected" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens"})
+          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
           .and_return(Set.new(%w[russian-blues]))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("russian-blues").and_return(russian_blue_group)
         allow(Entitlements::Util::Util).to receive(:dns_for_ou).with("foo-githubteam", anything).and_return([russian_blue_group.dn])
@@ -204,7 +205,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
 
       it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens"})
+          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
           .and_return(Set.new(%w[snowshoes russian-blues]))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("snowshoes").and_return(snowshoe_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("russian-blues").and_return(russian_blue_group)

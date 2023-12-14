@@ -28,9 +28,10 @@ module Entitlements
           addr: C::Maybe[String],
           org: String,
           token: String,
-          ou: String
+          ou: String,
+          ignore_not_found: C::Bool,
         ] => C::Any
-        def initialize(addr: nil, org:, token:, ou:)
+        def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
           super
           Entitlements.cache[:github_team_members] ||= {}
           Entitlements.cache[:github_team_members][org] ||= {}

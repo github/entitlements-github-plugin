@@ -7,7 +7,8 @@ describe Entitlements::Backend::GitHubTeam::Provider do
       addr: "https://github.fake/api/v3",
       org: "kittensinc",
       token: "GoPackGo",
-      ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake"
+      ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+      ignore_not_found: false
     }
   end
 

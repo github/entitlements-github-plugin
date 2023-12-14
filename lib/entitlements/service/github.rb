@@ -17,7 +17,7 @@ module Entitlements
       MAX_GRAPHQL_RETRIES = 3
       WAIT_BETWEEN_GRAPHQL_RETRIES = 1
 
-      attr_reader :addr, :org, :token, :ou
+      attr_reader :addr, :org, :token, :ou, :ignore_not_found
 
       # Constructor.
       #
@@ -31,14 +31,16 @@ module Entitlements
         addr: C::Maybe[String],
         org: String,
         token: String,
-        ou: String
+        ou: String,
+        ignore_not_found: C::Bool,
       ] => C::Any
-      def initialize(addr: nil, org:, token:, ou:)
+      def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
         # Save some parameters for the connection but don't actually connect yet.
         @addr = addr
         @org = org
         @token = token
         @ou = ou
+        @ignore_not_found = ignore_not_found
 
         # This is a global cache across all invocations of this object. GitHub membership
         # need to be obtained only one time per organization, but might be used multiple times.
