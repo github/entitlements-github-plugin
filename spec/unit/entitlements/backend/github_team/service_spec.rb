@@ -585,13 +585,13 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "raises when user is not found" do
         expect(subject).to receive(:validate_team_id_and_slug!).with(1001, "russian-blues").and_return(true)
         expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
-  
+
         add_membership_response = {
           "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
           "role"  => "member",
           "state" => "active"
         }
-  
+
         stub_request(:put, "https://github.fake/api/v3/teams/1001/memberships/blackmanx")
           .to_return(
             status: 404,
@@ -622,13 +622,13 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "ignores 404s" do
         expect(subject).to receive(:validate_team_id_and_slug!).with(1001, "russian-blues").and_return(true)
         expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
-  
+
         add_membership_response = {
           "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
           "role"  => "member",
           "state" => "active"
         }
-  
+
         stub_request(:put, "https://github.fake/api/v3/teams/1001/memberships/blackmanx")
           .to_return(
             status: 404,
