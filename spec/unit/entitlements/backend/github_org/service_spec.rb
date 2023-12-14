@@ -185,7 +185,7 @@ describe Entitlements::Backend::GitHubOrg::Service do
           expect(logger).to receive(:debug).with("github.fake add_user_to_organization(user=bob, org=kittensinc, role=admin)")
           expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
           expect(logger).to receive(:warn).with("User bob not found in GitHub instance github.fake, ignoring.")
-  
+
           stub_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
             status: 404,
             headers: {
@@ -196,7 +196,7 @@ describe Entitlements::Backend::GitHubOrg::Service do
               "documentation_url" => "https://docs.github.com/rest"
             })
           )
-  
+
           result = subject.send(:add_user_to_organization, "bob", "admin")
           expect(result).to eq(false)
         end
