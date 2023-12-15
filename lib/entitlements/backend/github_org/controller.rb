@@ -120,12 +120,13 @@ module Entitlements
         Contract String, C::HashOf[String => C::Any] => nil
         def validate_config!(key, data)
           spec = COMMON_GROUP_CONFIG.merge({
-            "base"     => { required: true, type: String },
-            "addr"     => { required: false, type: String },
-            "org"      => { required: true, type: String },
-            "token"    => { required: true, type: String },
-            "features" => { required: false, type: Array },
-            "ignore"   => { required: false, type: Array }
+            "base"             => { required: true, type: String },
+            "addr"             => { required: false, type: String },
+            "org"              => { required: true, type: String },
+            "token"            => { required: true, type: String },
+            "features"         => { required: false, type: Array },
+            "ignore"           => { required: false, type: Array },
+            "ignore_not_found" => { required: false, type: [FalseClass, TrueClass] },
           })
           text = "GitHub organization group #{key.inspect}"
           Entitlements::Util::Util.validate_attr!(spec, data, text)

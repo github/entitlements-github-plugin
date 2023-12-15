@@ -11,7 +11,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
       addr: "https://github.fake/api/v3",
       org: "kittensinc",
       token: "GoPackGo",
-      ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake"
+      ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+      ignore_not_found: false
     )
   end
 
@@ -578,6 +579,71 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       result = subject.send(:add_user_to_team, user: "blackmanx", team:)
       expect(result).to eq(false)
+    end
+
+    context "ignore_not_found is false" do
+      it "raises when user is not found" do
+        expect(subject).to receive(:validate_team_id_and_slug!).with(1001, "russian-blues").and_return(true)
+        expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
+
+        add_membership_response = {
+          "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+          "role"  => "member",
+          "state" => "active"
+        }
+
+        stub_request(:put, "https://github.fake/api/v3/teams/1001/memberships/blackmanx")
+          .to_return(
+            status: 404,
+            headers: {
+              "Content-Type" => "application/json"
+            },
+            body: JSON.generate({
+              "message"           => "Not Found",
+              "documentation_url" => "https://docs.github.com/rest"
+            })
+          )
+
+        expect { subject.send(:add_user_to_team, user: "blackmanx", team:) }.to raise_error(Octokit::NotFound)
+      end
+    end
+
+    context "ignore_not_found is true" do
+      let(:subject) do
+        described_class.new(
+          addr: "https://github.fake/api/v3",
+          org: "kittensinc",
+          token: "GoPackGo",
+          ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+          ignore_not_found: true
+        )
+      end
+
+      it "ignores 404s" do
+        expect(subject).to receive(:validate_team_id_and_slug!).with(1001, "russian-blues").and_return(true)
+        expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
+
+        add_membership_response = {
+          "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+          "role"  => "member",
+          "state" => "active"
+        }
+
+        stub_request(:put, "https://github.fake/api/v3/teams/1001/memberships/blackmanx")
+          .to_return(
+            status: 404,
+            headers: {
+              "Content-type" => "application/json"
+            },
+            body: JSON.generate({
+              "message"           => "Not Found",
+              "documentation_url" => "https://docs.github.com/rest"
+            })
+          )
+
+        result = subject.send(:add_user_to_team, user: "blackmanx", team:)
+        expect(result).to eq(false)
+      end
     end
   end
 

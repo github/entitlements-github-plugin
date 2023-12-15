@@ -56,6 +56,7 @@ Any plugins defined in `lib/entitlements-and-plugins` will be loaded and used at
     dir: github.com/github/org
     org: github
     token: <%= ENV["GITHUB_ORG_TOKEN"] %>
+    ignore_not_found: false # optional argument to ignore users who are not found in the GitHub instance
     type: "github_org"
 ```
 
@@ -72,6 +73,7 @@ Any plugins defined in `lib/entitlements-and-plugins` will be loaded and used at
     dir: github.com/github/teams
     org: github
     token: <%= ENV["GITHUB_ORG_TOKEN"] %>
+    ignore_not_found: false # optional argument to ignore users who are not found in the GitHub instance
     type: "github_team"
 ```
 

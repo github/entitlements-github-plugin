@@ -23,7 +23,8 @@ module Entitlements
             org: config.fetch("org"),
             addr: config.fetch("addr", nil),
             token: config.fetch("token"),
-            ou: config.fetch("base")
+            ou: config.fetch("base"),
+            ignore_not_found: config.fetch("ignore_not_found", false)
           )
 
           @github_team_cache = {}
