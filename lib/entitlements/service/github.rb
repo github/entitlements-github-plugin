@@ -21,10 +21,11 @@ module Entitlements
 
       # Constructor.
       #
-      # addr   - Base URL a GitHub Enterprise API (leave undefined to use dotcom)
-      # org    - String with organization name
-      # token  - Access token for GitHub API
-      # ou     - Base OU for fudged DNs
+      # addr             - Base URL a GitHub Enterprise API (leave undefined to use dotcom)
+      # org              - String with organization name
+      # token            - Access token for GitHub API
+      # ou               - Base OU for fudged DNs
+      # ignore_not_found - Boolean to ignore not found errors
       #
       # Returns nothing.
       Contract C::KeywordArgs[
@@ -32,7 +33,7 @@ module Entitlements
         org: String,
         token: String,
         ou: String,
-        ignore_not_found: C::Bool,
+        ignore_not_found: C::Maybe[C::Bool],
       ] => C::Any
       def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
         # Save some parameters for the connection but don't actually connect yet.
