@@ -35,8 +35,9 @@ module Entitlements
         def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
           super
           Entitlements.cache[:github_team_members] ||= {}
-          Entitlements.cache[:github_team_members][org] ||= {}
-          @team_cache = Entitlements.cache[:github_team_members][org]
+          Entitlements.cache[:github_team_members][addr] ||= {}
+          Entitlements.cache[:github_team_members][addr][org] ||= {}
+          @team_cache = Entitlements.cache[:github_team_members][addr][org]
         end
 
         # Read a single team identified by its slug and return a team object.
