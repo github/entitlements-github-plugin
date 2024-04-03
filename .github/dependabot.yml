@@ -1,0 +1,29 @@
+---
+version: 2
+updates:
+  - package-ecosystem: bundler
+    vendor: true
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: "monday"
+      time: "21:00"
+    groups:
+      prod-ruby-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "*"
+      dev-ruby-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+  - package-ecosystem: github-actions
+    directory: "/"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    schedule:
+      interval: weekly
+      day: "tuesday"
+      time: "21:00"
