@@ -131,7 +131,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  entitlements-app (~> 0.3.1)
+  entitlements-app (~> 0.3)
   entitlements-github-plugin!
   rake (~> 13.0.6)
   rspec (~> 3.8.0)

@@ -19,7 +19,7 @@ Gem::Specification.new do |s|
   s.add_dependency "faraday-retry", "~> 2.0"
   s.add_dependency "octokit", "~> 4.25"
 
-  s.add_development_dependency "entitlements-app", "~> 0.3.1"
+  s.add_development_dependency "entitlements-app", "~> 0.3"
   s.add_development_dependency "rake", "~> 13.0.6"
   s.add_development_dependency "rspec", "~> 3.8.0"
   s.add_development_dependency "rspec-core", "~> 3.8.0"
