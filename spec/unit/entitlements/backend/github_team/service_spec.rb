@@ -711,14 +711,14 @@ describe Entitlements::Backend::GitHubTeam::Service do
             "Content-Type"  => "application/json",
           }).to_return(status: 200, body: graphql_dotcom_response)
 
-         result = subject.send(:graphql_team_data, "grumpy-cat")
-         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
-         expect(result).to eq(
-           members:,
-           team_id: 593721,
-           parent_team_name: nil,
-           roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
-         )
+        result = subject.send(:graphql_team_data, "grumpy-cat")
+        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
+        expect(result).to eq(
+          members:,
+          team_id: 593721,
+          parent_team_name: nil,
+          roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
+        )
       end
     end
 
@@ -751,14 +751,14 @@ describe Entitlements::Backend::GitHubTeam::Service do
             { status: 200, body: graphql_dotcom_response_3 }
           )
 
-         result = subject.send(:graphql_team_data, "grumpy-cat")
-         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
-         expect(result).to eq(
-           members:,
-           team_id: 593721,
-           parent_team_name: nil,
-           roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
-         )
+        result = subject.send(:graphql_team_data, "grumpy-cat")
+        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
+        expect(result).to eq(
+          members:,
+          team_id: 593721,
+          parent_team_name: nil,
+          roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
+        )
       end
     end
 
@@ -791,14 +791,14 @@ describe Entitlements::Backend::GitHubTeam::Service do
             { status: 200, body: graphql_dotcom_response_3 }
           )
 
-         result = subject.send(:graphql_team_data, "grumpy-cat")
-         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
-         expect(result).to eq(
-           members:,
-           team_id: 593721,
-           parent_team_name: nil,
-           roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
-         )
+        result = subject.send(:graphql_team_data, "grumpy-cat")
+        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
+        expect(result).to eq(
+          members:,
+          team_id: 593721,
+          parent_team_name: nil,
+          roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
+        )
       end
     end
   end

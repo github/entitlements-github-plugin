@@ -86,30 +86,30 @@ describe Entitlements::Backend::GitHubTeam::Controller do
       )
     end
 
-   context "with changes" do
-     let(:russian_blue_group) do
-       Entitlements::Models::Group.new(
-         dn: "cn=russian-blues,ou=kittensinc,ou=GitHub,dc=github,dc=com",
-         members: Set.new(%w[RagaMuffin MAINECOON]),
-         metadata: { "team_id" => 1001 }
-       )
-     end
+    context "with changes" do
+      let(:russian_blue_group) do
+        Entitlements::Models::Group.new(
+          dn: "cn=russian-blues,ou=kittensinc,ou=GitHub,dc=github,dc=com",
+          members: Set.new(%w[RagaMuffin MAINECOON]),
+          metadata: { "team_id" => 1001 }
+        )
+      end
 
-     let(:snowshoe_group) do
-       Entitlements::Models::Group.new(
-         dn: "cn=snowshoes,ou=kittensinc,ou=GitHub,dc=github,dc=com",
-         members: Set.new(%w[blackmanx RagaMuffin MAINECOON])
-       )
-     end
+      let(:snowshoe_group) do
+        Entitlements::Models::Group.new(
+          dn: "cn=snowshoes,ou=kittensinc,ou=GitHub,dc=github,dc=com",
+          members: Set.new(%w[blackmanx RagaMuffin MAINECOON])
+        )
+      end
 
-     let(:chicken_group) do
-       Entitlements::Models::Group.new(
-         dn: "cn=chicken,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
-         members: Set.new(%w[BlackManx highlander RUSSIANBLue])
-       )
-     end
+      let(:chicken_group) do
+        Entitlements::Models::Group.new(
+          dn: "cn=chicken,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+          members: Set.new(%w[BlackManx highlander RUSSIANBLue])
+        )
+      end
 
-     it "logs expected output and returns expected actions" do
+      it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
           .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
           .and_return(Set.new(%w[snowshoes russian-blues]))
@@ -145,8 +145,8 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         expect(result[1].dn).to eq("russian-blues")
         expect(result[1].existing.member_strings).to eq(Set.new(%w[blackmanx mainecoon]))
         expect(result[1].updated.member_strings).to eq(Set.new(%w[RagaMuffin MAINECOON]))
-     end
-   end
+      end
+    end
 
     context "with no changes" do
       let(:russian_blue_group) do

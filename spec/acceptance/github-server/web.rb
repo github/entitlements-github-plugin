@@ -260,7 +260,7 @@ class FakeGitHubApi < Sinatra::Base
     query = postdata["query"]
 
     result = if query =~ /team\(slug:/
-      graphql_team_query(query)
+               graphql_team_query(query)
     elsif query =~ /membersWithRole\(/
       graphql_org_query(query)
     elsif query =~ /pendingMembers\(/

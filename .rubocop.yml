@@ -3,9 +3,10 @@ inherit_gem:
     - config/default.yml
 
 AllCops:
+  NewCops: disable
   SuggestExtensions: false
   DisplayCopNames: true
-  TargetRubyVersion: 3.1
+  TargetRubyVersion: 3.3
   Exclude:
     - 'bin/*'
     - 'spec/acceptance/fixtures/**/*'
