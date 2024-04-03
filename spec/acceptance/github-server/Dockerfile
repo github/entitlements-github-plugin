@@ -1,4 +1,4 @@
-FROM ruby:3.1-slim
+FROM ruby:3.3-slim
 LABEL maintainer="GitHub Security Ops <opensource+entitlements-app@github.com>"
 
 # Install dependency packages for bootstrapping and running...
