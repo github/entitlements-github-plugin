@@ -51,10 +51,10 @@ jobs:
             echo "::set-output name=has_change::true"
           fi
 
-  acceptance-suite:
+  acceptance:
     needs: changes
     runs-on: ubuntu-latest-xl
-    name: runner / acceptance-tests
+    name: acceptance
     permissions:
       contents: read
 

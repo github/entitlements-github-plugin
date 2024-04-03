@@ -31,7 +31,7 @@ jobs:
         run: bundle exec rubocop -c .rubocop.yml lib/ spec/
 
       - name: test
-        run: script/test
+        run: script/test -d -k
 
       - name: set GEM_NAME from gemspec
         run: echo "GEM_NAME=$(ls | grep gemspec | cut -d. -f1)" >> $GITHUB_ENV
