@@ -6,12 +6,17 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  rubocop:
-    name: runner / rspec
+  test:
+    name: test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+
+    strategy:
+      matrix:
+        ruby: [ '3.1.2', '3.1.4', '3.2.2', '3.2.3', '3.3.0' ]
 
     steps:
       - name: checkout
@@ -20,6 +25,10 @@ jobs:
       - uses: ruby/setup-ruby@5f19ec79cedfadb78ab837f95b87734d0003c899 # pin@v1.173.0
         with:
           bundler-cache: true
+          ruby-version: ${{ matrix.ruby }}
+
+      - name: bootstrap
+        run: script/bootstrap
 
       - name: test
         run: script/test -d -k
