@@ -31,7 +31,7 @@ begin_fold "Bootstrapping"
 cd "$DIR"
 mkdir -p .git/hooks # So bootstrap doesn't fail to create symlinks
 script/bootstrap 1>&2
-bundle binstubs entitlements
+bundle binstubs entitlements-app
 end_fold
 
 begin_fold "Verifying network connectivity to the LDAP container"
