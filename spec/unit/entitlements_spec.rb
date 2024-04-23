@@ -101,9 +101,9 @@ describe Entitlements do
 
     it "calls Entitlements::Data::Groups::Calculated with appropriate arguments" do
       expect(Entitlements::Data::Groups::Calculated).to receive(:register_filter)
-        .with("filter1", class: Entitlements::Data::Groups::Calculated::Filters::MemberOfGroup, config: { "foo" => "bar" })
+        .with("filter1", { class: Entitlements::Data::Groups::Calculated::Filters::MemberOfGroup, config: { "foo" => "bar" } })
       expect(Entitlements::Data::Groups::Calculated).to receive(:register_filter)
-        .with("filter2", class: Entitlements::Extras::LDAPGroup::Filters::MemberOfLDAPGroup, config: {})
+        .with("filter2", { class: Entitlements::Extras::LDAPGroup::Filters::MemberOfLDAPGroup, config: {} })
       expect(logger).to receive(:debug).with("Registering filter filter1 (class: Entitlements::Data::Groups::Calculated::Filters::MemberOfGroup)")
       expect(logger).to receive(:debug).with("Registering filter filter2 (class: Entitlements::Extras::LDAPGroup::Filters::MemberOfLDAPGroup)")
       described_class.register_filters
