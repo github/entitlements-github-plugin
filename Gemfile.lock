@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    entitlements-github-plugin (0.6.0)
+    entitlements-github-plugin (0.7.0)
       contracts (~> 0.17.0)
       faraday (~> 2.0)
       faraday-retry (~> 2.0)
