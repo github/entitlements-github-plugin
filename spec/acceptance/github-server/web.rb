@@ -377,7 +377,8 @@ class FakeGitHubApi < Sinatra::Base
     File.open(TEAM_MAP_FILE, "w") do |f|
       f.write(JSON.pretty_generate(tmp_map))
     end
-    halt 201
+
+    [201, { "Content-Type" => "application/json" }, [JSON.generate(teamdata)]]
   end
 
   send :get, "/orgs/:org_name/teams/:team_name" do
