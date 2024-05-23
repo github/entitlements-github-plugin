@@ -271,8 +271,19 @@ module Entitlements
             begin
               entitlement_metadata = entitlement_group.metadata
               unless entitlement_metadata["parent_team_name"].nil?
-                parent_team_data = graphql_team_data(entitlement_metadata["parent_team_name"])
-                team_options[:parent_team_id] = parent_team_data[:team_id]
+
+                begin
+                  parent_team_data = graphql_team_data(entitlement_metadata["parent_team_name"])
+                  team_options[:parent_team_id] = parent_team_data[:team_id]
+                rescue TeamNotFound
+                  # if the parent team does not exist, create it (think `mkdir -p` logic here)
+                  result = octokit.create_team(
+                    org,
+                    { name: entitlement_metadata["parent_team_name"], repo_names: [], privacy: "closed" }
+                  )
+                  team_options[:parent_team_id] = result[:id]
+                end
+
                 Entitlements.logger.debug "create_team(team=#{team_name}) Parent team #{entitlement_metadata["parent_team_name"]} with id #{parent_team_data[:team_id]} found"
               end
             rescue Entitlements::Models::Group::NoMetadata
