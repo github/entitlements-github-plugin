@@ -21,7 +21,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       dn: "cn=cuddly-kittens,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
       description: ":smile_cat:",
       members: Set.new(%w[russian-blue snowshoe tabby siamese housecat tiger]),
-      metadata: {"application_owner" => "russian_blue"}
+      metadata: { "application_owner" => "russian_blue" }
     )
   end
 
@@ -30,7 +30,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       dn: "cn=cuddly-kittens,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
       description: ":smile_cat:",
       members: Set.new(%w[russian-blue snowshoe tabby siamese housecat tiger]),
-      metadata: {"parent_team_name" => "parent-cats"}
+      metadata: { "parent_team_name" => "parent-cats" }
     )
   end
 
@@ -54,17 +54,17 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
   let(:cuddly_kittens) do
     Entitlements::Backend::GitHubTeam::Models::Team.new(
-      team_id: 1234567,
+      team_id: 1_234_567,
       team_name: "cuddly-kittens",
       members: Set.new(%w[russian-blue snowshoe tabby siamese housecat tiger]),
       ou: "cuteness",
-      metadata: {"application_owner" => "russian_blue"}
+      metadata: { "application_owner" => "russian_blue" }
     )
   end
 
   let(:cuddly_kittens_no_metadata) do
     Entitlements::Backend::GitHubTeam::Models::Team.new(
-      team_id: 1234567,
+      team_id: 1_234_567,
       team_name: "cuddly-kittens",
       members: Set.new(%w[russian-blue snowshoe tabby siamese housecat tiger]),
       ou: "cuteness",
@@ -78,8 +78,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
   describe "#read_team" do
     it "returns nil when the team does not exist" do
       graphql_response = '{"data":{"organization":{"team":null}}}'
-      stub_request(:post, "https://github.fake/api/v3/graphql").
-        with(
+      stub_request(:post, "https://github.fake/api/v3/graphql")
+        .with(
           body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"team-does-not-exist\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response)
 
@@ -91,8 +91,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
     end
 
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object when the team exists" do
-      stub_request(:post, "https://github.fake/api/v3/graphql").
-        with(
+      stub_request(:post, "https://github.fake/api/v3/graphql")
+        .with(
           body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100))
 
@@ -108,8 +108,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
     end
 
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists" do
-      stub_request(:post, "https://github.fake/api/v3/graphql").
-        with(
+      stub_request(:post, "https://github.fake/api/v3/graphql")
+        .with(
           body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100, parent_team: "parent-cats"))
 
@@ -127,8 +127,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
     end
 
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists but has empty entitlement metadata" do
-      stub_request(:post, "https://github.fake/api/v3/graphql").
-        with(
+      stub_request(:post, "https://github.fake/api/v3/graphql")
+        .with(
           body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens_no_metadata, 0, 100, parent_team: "parent-cats"))
 
@@ -168,7 +168,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "retrieves a value from the predictive cache" do
       people = Set.new(%w[blackmanx ragamuffin russianblue])
-      Entitlements.cache[:predictive_state] = { by_ou: {}, by_dn: { team_dn => { members: people, metadata: nil } }, invalid: Set.new }
+      Entitlements.cache[:predictive_state] =
+        { by_ou: {}, by_dn: { team_dn => { members: people, metadata: nil } }, invalid: Set.new }
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens from cache")
 
       result = subject.read_team(entitlement_group_exists)
@@ -179,9 +180,10 @@ describe Entitlements::Backend::GitHubTeam::Service do
     end
 
     it "retrieves a value from the predictive cache with no entitlement metadata" do
-
       people = Set.new(%w[blackmanx ragamuffin russianblue])
-      Entitlements.cache[:predictive_state] = { by_ou: {}, by_dn: { team_dn => { members: people, metadata: { "parent_team_name" => "parent-cats" } } }, invalid: Set.new }
+      Entitlements.cache[:predictive_state] =
+        { by_ou: {}, by_dn: { team_dn => { members: people, metadata: { "parent_team_name" => "parent-cats" } } },
+          invalid: Set.new }
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens from cache")
 
       result = subject.read_team(entitlement_group_exists_no_metadata)
@@ -193,7 +195,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "retrieves a value with metadata from the predictive cache" do
       people = Set.new(%w[blackmanx ragamuffin russianblue])
-      Entitlements.cache[:predictive_state] = { by_ou: {}, by_dn: { team_dn => { members: people, metadata: { "application_owner" => "cheetoh" } } }, invalid: Set.new }
+      Entitlements.cache[:predictive_state] =
+        { by_ou: {}, by_dn: { team_dn => { members: people, metadata: { "application_owner" => "cheetoh" } } },
+          invalid: Set.new }
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens from cache")
 
       result = subject.read_team(entitlement_group_exists)
@@ -206,7 +210,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "has value from the cache take precedence over value from the file" do
       people = Set.new(%w[blackmanx ragamuffin russianblue])
-      Entitlements.cache[:predictive_state] = { by_ou: {}, by_dn: { team_dn => { members: people, metadata: { "application_owner" => "cheetoh" } } }, invalid: Set.new }
+      Entitlements.cache[:predictive_state] =
+        { by_ou: {}, by_dn: { team_dn => { members: people, metadata: { "application_owner" => "cheetoh" } } },
+          invalid: Set.new }
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens from cache")
 
       result = subject.read_team(entitlement_group_exists)
@@ -226,7 +232,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "returns false" do
         cache[:predictive_state] = { by_dn: {}, invalid: Set.new }
 
-        expect(subject).to receive(:graphql_team_data).and_return(members: people.to_a, team_id: 1234567, roles: Hash[*people.collect { |u| [u, "member"] }.flatten])
+        expect(subject).to receive(:graphql_team_data).and_return(members: people.to_a, team_id: 1_234_567, roles: Hash[*people.collect do |u|
+                                                                                                                          [u, "member"]
+                                                                                                                        end.flatten])
         expect(logger).to receive(:debug).with("members(#{team_dn}): DN does not exist in cache")
         expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
 
@@ -257,7 +265,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       # Invalidating cache should force a re-read.
       people_2 = Set.new(people + %w[peterbald])
-      expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(members: people_2.to_a, team_id: 1234567, roles: Hash[*people_2.collect { |u| [u, "member"] }.flatten])
+      expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(members: people_2.to_a, team_id: 1_234_567, roles: Hash[*people_2.collect do |u|
+                                                                                                                                                [u, "member"]
+                                                                                                                                              end.flatten])
       expect(logger).to receive(:debug).with("Invalidating cache entry for #{team_dn}")
       expect(logger).to receive(:debug).with("members(#{team_dn}): DN has been marked invalid in cache")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
@@ -266,18 +276,16 @@ describe Entitlements::Backend::GitHubTeam::Service do
       # Check that the re-read has occurred and the correct result is achieved.
       expect(subject).not_to receive(:graphql_team_data) # Should already be in object's cache
       team_2 = subject.read_team(entitlement_group_exists)
-      expect(team_2.team_id).to eq(1234567)
+      expect(team_2.team_id).to eq(1_234_567)
       expect(team_2.member_strings).to eq(people_2)
     end
   end
 
   describe "#team_exists?" do
     it "returns true when the team can be read" do
-
     end
 
     it "returns false when the team cannot be read" do
-
     end
   end
 
@@ -287,7 +295,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
         dn: "cn=russian-blues,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
         description: ":smile_cat:",
         members: Set.new(%w[blackmanx ragamuffin MAINECOON]),
-        metadata: {"team_id" => 1001}
+        metadata: { "team_id" => 1001 }
       )
     end
 
@@ -372,7 +380,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
         members: Set.new(%w[blackmanx ragamuffin MAINECOON]),
         ou: "ou=kittensinc,dc=github,dc=com",
         metadata: {
-          "parent_team_name" => "cuddly-kittens",
+          "parent_team_name" => "cuddly-kittens"
         }
       )
     end
@@ -441,8 +449,10 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "returns true when there were metadata changes" do
       allow(subject).to receive(:read_team).with(team_metadata_add).and_return(team_data_old)
-      expect(subject).to receive(:team_by_name).with(org_name: "kittensinc", team_name: "cuddly-kittens").and_return({ id: 10 })
-      expect(subject).to receive(:update_team).with(team: team_metadata_add, metadata: { parent_team_id: 10 }).and_return(true)
+      expect(subject).to receive(:team_by_name).with(org_name: "kittensinc",
+                                                     team_name: "cuddly-kittens").and_return({ id: 10 })
+      expect(subject).to receive(:update_team).with(team: team_metadata_add,
+                                                    metadata: { parent_team_id: 10 }).and_return(true)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Parent team change found - From No Parent Team to cuddly-kittens/)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
       result = subject.sync_team(team_metadata_add, team_data_old)
@@ -451,8 +461,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "returns true when there were metadata changes to add maintainer" do
       allow(subject).to receive(:read_team).with(team_metadata_add_maintainer).and_return(team_metadata_maintainer_old)
-      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Maintainer members change found - From \["ragamuffin"\] to \["blackmanx", \"ragamuffin\"\]/)
-      expect(subject).to receive(:add_user_to_team).with(user: "blackmanx", team: team_metadata_maintainer_old, role: "maintainer").and_return(true)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Maintainer members change found - From \["ragamuffin"\] to \["blackmanx", "ragamuffin"\]/)
+      expect(subject).to receive(:add_user_to_team).with(user: "blackmanx", team: team_metadata_maintainer_old,
+                                                         role: "maintainer").and_return(true)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
       result = subject.sync_team(team_metadata_add_maintainer, team_metadata_maintainer_old)
       expect(result).to eq(true)
@@ -469,7 +480,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns true when there were metadata changes to remove a maintainer" do
       allow(subject).to receive(:read_team).with(team_metadata_maintainer_old).and_return(team_metadata_add_maintainer)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Maintainer members change found - From \["blackmanx", "ragamuffin"\] to \["ragamuffin"\]/)
-      expect(subject).to receive(:add_user_to_team).with(user: "blackmanx", team: team_metadata_maintainer_old, role: "member").and_return(true)
+      expect(subject).to receive(:add_user_to_team).with(user: "blackmanx", team: team_metadata_maintainer_old,
+                                                         role: "member").and_return(true)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
       result = subject.sync_team(team_metadata_maintainer_old, team_metadata_add_maintainer)
       expect(result).to eq(true)
@@ -478,7 +490,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns false when there were metadata changes to add maintainer who is NOT in the team" do
       allow(subject).to receive(:read_team).with(team_metadata_add_non_member_maintainer).and_return(team_metadata_maintainer_old)
       expect(logger).to receive(:warn).with(/sync_team\(russian-blues=1001\): Maintainers must be a subset of team members. Desired maintainers: \["krukow"\] are not members. Ignoring./)
-      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Textual change but no semantic change in maintainers. It is remains: \["ragamuffin\"\]./)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Textual change but no semantic change in maintainers. It is remains: \["ragamuffin"\]./)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
       result = subject.sync_team(team_metadata_add_non_member_maintainer, team_metadata_maintainer_old)
       expect(result).to eq(false)
@@ -510,8 +522,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
 
       add_membership_response = {
-        "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
-        "role"  => "member",
+        "url" => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+        "role" => "member",
         "state" => "active"
       }
 
@@ -533,8 +545,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
 
       add_membership_response = {
-        "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
-        "role"  => "member",
+        "url" => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+        "role" => "member",
         "state" => "pending"
       }
 
@@ -556,8 +568,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
 
       add_membership_response = {
-        "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
-        "role"  => "member",
+        "url" => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+        "role" => "member",
         "state" => "at chick-fil-a"
       }
 
@@ -587,8 +599,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
         expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
 
         add_membership_response = {
-          "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
-          "role"  => "member",
+          "url" => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+          "role" => "member",
           "state" => "active"
         }
 
@@ -599,9 +611,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
               "Content-Type" => "application/json"
             },
             body: JSON.generate({
-              "message"           => "Not Found",
-              "documentation_url" => "https://docs.github.com/rest"
-            })
+                                  "message" => "Not Found",
+                                  "documentation_url" => "https://docs.github.com/rest"
+                                })
           )
 
         expect { subject.send(:add_user_to_team, user: "blackmanx", team:) }.to raise_error(Octokit::NotFound)
@@ -624,8 +636,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
         expect(subject).to receive(:org_members).and_return(Set.new(%w[blackmanx]))
 
         add_membership_response = {
-          "url"   => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
-          "role"  => "member",
+          "url" => "https://github.fake/api/v3/teams/1001/memberships/blackmanx",
+          "role" => "member",
           "state" => "active"
         }
 
@@ -636,9 +648,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
               "Content-type" => "application/json"
             },
             body: JSON.generate({
-              "message"           => "Not Found",
-              "documentation_url" => "https://docs.github.com/rest"
-            })
+                                  "message" => "Not Found",
+                                  "documentation_url" => "https://docs.github.com/rest"
+                                })
           )
 
         result = subject.send(:add_user_to_team, user: "blackmanx", team:)
@@ -691,33 +703,36 @@ describe Entitlements::Backend::GitHubTeam::Service do
         stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: empty)
         expect do
           subject.send(:graphql_team_data, "crying-cat-face")
-        end.to raise_error(Entitlements::Backend::GitHubTeam::Service::TeamNotFound, "Requested team crying-cat-face does not exist in kittensinc!")
+        end.to raise_error(Entitlements::Backend::GitHubTeam::Service::TeamNotFound,
+                           "Requested team crying-cat-face does not exist in kittensinc!")
       end
     end
 
     context "team found, single page of results" do
       let(:graphql_dotcom_response) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
         EOF
       end
 
       it "parses team data from a single page of results" do
-        stub_request(:post, "https://github.fake/api/v3/graphql").
-          with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}",
-          headers: {
-            "Authorization" => "bearer GoPackGo",
-            "Content-Type"  => "application/json",
-          }).to_return(status: 200, body: graphql_dotcom_response)
+        stub_request(:post, "https://github.fake/api/v3/graphql")
+          .with(
+            body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}",
+            headers: {
+              "Authorization" => "bearer GoPackGo",
+              "Content-Type" => "application/json"
+            }
+          ).to_return(status: 200, body: graphql_dotcom_response)
 
         result = subject.send(:graphql_team_data, "grumpy-cat")
-        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
+        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue",
+                   "ragamuffin", "minskin"]
         expect(result).to eq(
           members:,
-          team_id: 593721,
+          team_id: 593_721,
           parent_team_name: nil,
-          roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
+          roles: Hash[*members.collect { |member| [member, "member"] }.flatten]
         )
       end
     end
@@ -726,38 +741,39 @@ describe Entitlements::Backend::GitHubTeam::Service do
       before(:each) { allow(subject).to receive(:max_graphql_results).and_return(4) }
 
       let(:graphql_dotcom_response_1) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="}]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_2) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="}]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="},{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_3) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
         EOF
       end
 
       it "parses team data from paginated results" do
-        stub_request(:post, "https://github.fake/api/v3/graphql").
-          to_return(
+        stub_request(:post, "https://github.fake/api/v3/graphql")
+          .to_return(
             { status: 200, body: graphql_dotcom_response_1 },
             { status: 200, body: graphql_dotcom_response_2 },
             { status: 200, body: graphql_dotcom_response_3 }
           )
 
         result = subject.send(:graphql_team_data, "grumpy-cat")
-        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
+        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue",
+                   "ragamuffin", "minskin"]
         expect(result).to eq(
           members:,
-          team_id: 593721,
+          team_id: 593_721,
           parent_team_name: nil,
-          roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
+          roles: Hash[*members.collect { |member| [member, "member"] }.flatten]
         )
       end
     end
@@ -766,38 +782,39 @@ describe Entitlements::Backend::GitHubTeam::Service do
       before(:each) { allow(subject).to receive(:max_graphql_results).and_return(5) }
 
       let(:graphql_dotcom_response_1) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="}]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"highlander"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNNS0="},{"node":{"login":"blackmanx"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHNTkI="},{"node":{"login":"toyger"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAARtag=="},{"node":{"login":"ocicat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAVi0w=="},{"node":{"login":"hubot"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAAdWqg=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_2) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[{"node":{"login":"korat"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOABODaQ=="},{"node":{"login":"MAINECOON"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEIdJg=="},{"node":{"login":"russianblue"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAEqWvg=="},{"node":{"login":"ragamuffin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOAHgBJQ=="},{"node":{"login":"minskin"},"role":"MEMBER","cursor":"Y3Vyc29yOnYyOpHOALafPw=="}]}}}}}
         EOF
       end
 
       let(:graphql_dotcom_response_3) do
-        <<-EOF
-{"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[]}}}}}
+        <<~EOF
+          {"data":{"organization":{"team":{"databaseId":593721,"members":{"edges":[]}}}}}
         EOF
       end
 
       it "parses team data from paginated results" do
-        stub_request(:post, "https://github.fake/api/v3/graphql").
-          to_return(
+        stub_request(:post, "https://github.fake/api/v3/graphql")
+          .to_return(
             { status: 200, body: graphql_dotcom_response_1 },
             { status: 200, body: graphql_dotcom_response_2 },
             { status: 200, body: graphql_dotcom_response_3 }
           )
 
         result = subject.send(:graphql_team_data, "grumpy-cat")
-        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue", "ragamuffin", "minskin"]
+        members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue",
+                   "ragamuffin", "minskin"]
         expect(result).to eq(
           members:,
-          team_id: 593721,
+          team_id: 593_721,
           parent_team_name: nil,
-          roles: Hash[*members.collect { |member| [member, "member"] }.flatten],
+          roles: Hash[*members.collect { |member| [member, "member"] }.flatten]
         )
       end
     end
@@ -821,7 +838,8 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
       expect do
         subject.send(:validate_team_id_and_slug!, 1234, "my-slug")
-      end.to raise_error(RuntimeError, 'validate_team_id_and_slug! mismatch: team_id=1234 expected="my-slug" got="some-other-slug"')
+      end.to raise_error(RuntimeError,
+                         'validate_team_id_and_slug! mismatch: team_id=1234 expected="my-slug" got="some-other-slug"')
     end
 
     it "does not handle octokit error" do
@@ -841,8 +859,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "creates a team" do
       octokit = instance_double(Octokit::Client)
       allow(subject).to receive(:octokit).and_return(octokit)
-      expect(octokit).to receive(:create_team).and_return(true)
+      expect(octokit).to receive(:create_team).and_return(id: 1_234_567).once
       expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens)")
+      expect(logger).to receive(:debug).with("created team cuddly-kittens with id 1234567")
 
       created = subject.create_team(entitlement_group: entitlement_group_exists)
       expect(created).to eq(true)
@@ -851,10 +870,30 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "creates a team with a parent team" do
       octokit = instance_double(Octokit::Client)
       allow(subject).to receive(:octokit).and_return(octokit)
-      expect(octokit).to receive(:create_team).and_return(true)
-      expect(subject).to receive(:graphql_team_data).with("parent-cats").and_return(members: Set.new, team_id: 1234567)
+      expect(octokit).to receive(:create_team).and_return(id: 1_234_567).once
+      expect(subject).to receive(:graphql_team_data).with("parent-cats").and_return(members: Set.new,
+                                                                                    team_id: 1_234_567)
       expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens) Parent team parent-cats with id 1234567 found")
       expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens)")
+      expect(logger).to receive(:debug).with("created team cuddly-kittens with id 1234567")
+
+      created = subject.create_team(entitlement_group: entitlement_group_parent_team)
+      expect(created).to eq(true)
+    end
+
+    it "creates a team and also the parent team when it is not found" do
+      octokit = instance_double(Octokit::Client)
+      allow(subject).to receive(:octokit).and_return(octokit)
+      expect(octokit).to receive(:create_team).and_return({ id: 1_234_567 }).once
+      expect(octokit).to receive(:create_team).and_return({ id: 1_234_555 }).once
+      expect(subject).to receive(:graphql_team_data)
+        .with("parent-cats")
+        .and_raise(Entitlements::Backend::GitHubTeam::Service::TeamNotFound)
+
+      expect(logger).to receive(:debug).with("created parent team parent-cats with id 1234567")
+      expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens) Parent team parent-cats with id 1234567 found")
+      expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens)")
+      expect(logger).to receive(:debug).with("created team cuddly-kittens with id 1234555")
 
       created = subject.create_team(entitlement_group: entitlement_group_parent_team)
       expect(created).to eq(true)
@@ -863,9 +902,10 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "creates a team with empty metadata" do
       octokit = instance_double(Octokit::Client)
       allow(subject).to receive(:octokit).and_return(octokit)
-      expect(octokit).to receive(:create_team).and_return(true)
+      expect(octokit).to receive(:create_team).and_return(id: 1_234_567).once
       expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens) No metadata found")
       expect(logger).to receive(:debug).with("create_team(team=cuddly-kittens)")
+      expect(logger).to receive(:debug).with("created team cuddly-kittens with id 1234567")
 
       created = subject.create_team(entitlement_group: entitlement_group_exists_no_metadata)
       expect(created).to eq(true)
