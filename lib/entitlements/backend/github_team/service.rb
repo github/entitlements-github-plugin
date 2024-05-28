@@ -32,7 +32,7 @@ module Entitlements
           ou: String,
           ignore_not_found: C::Maybe[C::Bool],
         ] => C::Any
-        def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
+        def initialize(org:, token:, ou:, addr: nil, ignore_not_found: false)
           super
           Entitlements.cache[:github_team_members] ||= {}
           Entitlements.cache[:github_team_members][org_signature] ||= {}
@@ -107,8 +107,8 @@ module Entitlements
                 end
 
                 maintainers = teamdata[:members].select { |u| teamdata[:roles][u] == "maintainer" }
-                team_metadata = team_metadata || {}
-                team_metadata = team_metadata.merge({"team_maintainers" => maintainers.any? ? maintainers.join(",") : nil})
+                team_metadata ||= {}
+                team_metadata = team_metadata.merge({ "team_maintainers" => maintainers.any? ? maintainers.join(",") : nil })
 
                 team = Entitlements::Backend::GitHubTeam::Models::Team.new(
                   team_id: teamdata[:team_id],
@@ -139,7 +139,7 @@ module Entitlements
         def from_predictive_cache?(entitlement_group)
           team_identifier = entitlement_group.cn.downcase
           read_team(entitlement_group) unless @team_cache[team_identifier]
-          (@team_cache[team_identifier] && @team_cache[team_identifier][:cache]) ? true : false
+          @team_cache[team_identifier] && @team_cache[team_identifier][:cache] ? true : false
         end
 
         # Declare the entry to be invalid for a specific team, and if the prior knowledge
@@ -192,7 +192,7 @@ module Entitlements
             if desired_metadata["parent_team_name"].nil?
               Entitlements.logger.debug "sync_team(team=#{current_state.team_name}): IGNORING GitHub Parent Team DELETE"
             else
-            # :nocov:
+              # :nocov:
               Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Parent team change found - From #{current_metadata["parent_team_name"] || "No Parent Team"} to #{desired_metadata["parent_team_name"]}"
               desired_parent_team_id = team_by_name(org_name: org, team_name: desired_metadata["parent_team_name"])[:id]
               unless desired_parent_team_id.nil?
@@ -240,16 +240,19 @@ module Entitlements
                 Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Textual change but no semantic change in maintainers. It is remains: #{current_maintainers.to_a}."
               else
                 Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Maintainer members change found - From #{current_maintainers.to_a} to #{desired_maintainers.to_a}"
-                added_maintainers.select! { |username| add_user_to_team(user: username, team: current_state, role: "maintainer") }
+                added_maintainers.select! do |username|
+                  add_user_to_team(user: username, team: current_state, role: "maintainer")
+                end
 
                 ## We only touch previous maintainers who are actually still going to be members of the team
                 removed_maintainers = removed_maintainers.intersection(desired_team_members)
                 ## Downgrade membership to default (role: "member")
-                removed_maintainers.select! { |username| add_user_to_team(user: username, team: current_state, role: "member") }
+                removed_maintainers.select! do |username|
+                  add_user_to_team(user: username, team: current_state, role: "member")
+                end
               end
             end
           end
-
 
           Entitlements.logger.debug "sync_team(#{current_state.team_name}=#{current_state.team_id}): Added #{added_members.count}, removed #{removed_members.count}"
           added_members.any? || removed_members.any? || added_maintainers.any? || removed_maintainers.any? || changed_parent_team
@@ -264,28 +267,41 @@ module Entitlements
                    entitlement_group: Entitlements::Models::Group,
                  ] => C::Bool
         def create_team(entitlement_group:)
-          begin
-            team_name = entitlement_group.cn.downcase
-            team_options = { name: team_name, repo_names: [], privacy: "closed" }
+          team_name = entitlement_group.cn.downcase
+          team_options = { name: team_name, repo_names: [], privacy: "closed" }
 
-            begin
-              entitlement_metadata = entitlement_group.metadata
-              unless entitlement_metadata["parent_team_name"].nil?
+          begin
+            entitlement_metadata = entitlement_group.metadata
+            unless entitlement_metadata["parent_team_name"].nil?
+
+              begin
                 parent_team_data = graphql_team_data(entitlement_metadata["parent_team_name"])
                 team_options[:parent_team_id] = parent_team_data[:team_id]
-                Entitlements.logger.debug "create_team(team=#{team_name}) Parent team #{entitlement_metadata["parent_team_name"]} with id #{parent_team_data[:team_id]} found"
-              end
-            rescue Entitlements::Models::Group::NoMetadata
-              Entitlements.logger.debug "create_team(team=#{team_name}) No metadata found"
-            end
+              rescue TeamNotFound
+                # if the parent team does not exist, create it (think `mkdir -p` logic here)
+                result = octokit.create_team(
+                  org,
+                  { name: entitlement_metadata["parent_team_name"], repo_names: [], privacy: "closed" }
+                )
 
-            Entitlements.logger.debug "create_team(team=#{team_name})"
-            octokit.create_team(org, team_options)
-            true
-          rescue Octokit::UnprocessableEntity => e
-            Entitlements.logger.debug "create_team(team=#{team_name}) ERROR - #{e.message}"
-            false
+                Entitlements.logger.debug "created parent team #{entitlement_metadata["parent_team_name"]} with id #{result[:id]}"
+
+                team_options[:parent_team_id] = result[:id]
+              end
+
+              Entitlements.logger.debug "create_team(team=#{team_name}) Parent team #{entitlement_metadata["parent_team_name"]} with id #{team_options[:parent_team_id]} found"
+            end
+          rescue Entitlements::Models::Group::NoMetadata
+            Entitlements.logger.debug "create_team(team=#{team_name}) No metadata found"
           end
+
+          Entitlements.logger.debug "create_team(team=#{team_name})"
+          result = octokit.create_team(org, team_options)
+          Entitlements.logger.debug "created team #{team_name} with id #{result[:id]}"
+          true
+        rescue Octokit::UnprocessableEntity => e
+          Entitlements.logger.debug "create_team(team=#{team_name}) ERROR - #{e.message}"
+          false
         end
 
         # Update a team
@@ -298,15 +314,14 @@ module Entitlements
                    metadata: C::Or[Hash, nil]
                  ] => C::Bool
         def update_team(team:, metadata: {})
-          begin
-            Entitlements.logger.debug "update_team(team=#{team.team_name})"
-            options = { name: team.team_name, repo_names: [], privacy: "closed", parent_team_id: metadata[:parent_team_id] }
-            octokit.update_team(team.team_id, options)
-            true
-          rescue Octokit::UnprocessableEntity => e
-            Entitlements.logger.debug "update_team(team=#{team.team_name}) ERROR - #{e.message}"
-            false
-          end
+          Entitlements.logger.debug "update_team(team=#{team.team_name})"
+          options = { name: team.team_name, repo_names: [], privacy: "closed",
+                      parent_team_id: metadata[:parent_team_id] }
+          octokit.update_team(team.team_id, options)
+          true
+        rescue Octokit::UnprocessableEntity => e
+          Entitlements.logger.debug "update_team(team=#{team.team_name}) ERROR - #{e.message}"
+          false
         end
 
         # Gets a team by name
@@ -332,7 +347,8 @@ module Entitlements
         # team_slug - Identifier of the team to retrieve.
         #
         # Returns a data structure with team data.
-        Contract String => { members: C::ArrayOf[String], team_id: Integer, parent_team_name: C::Or[String, nil], roles: C::HashOf[String => String] }
+        Contract String => { members: C::ArrayOf[String], team_id: Integer, parent_team_name: C::Or[String, nil],
+                             roles: C::HashOf[String => String] }
         def graphql_team_data(team_slug)
           cursor = nil
           team_id = nil
@@ -370,9 +386,7 @@ module Entitlements
             end
 
             team = response[:data].fetch("data").fetch("organization").fetch("team")
-            if team.nil?
-              raise TeamNotFound, "Requested team #{team_slug} does not exist in #{org}!"
-            end
+            raise TeamNotFound, "Requested team #{team_slug} does not exist in #{org}!" if team.nil?
 
             team_id = team.fetch("databaseId")
             parent_team_name = team.dig("parentTeam", "slug")
@@ -390,6 +404,7 @@ module Entitlements
 
             cursor = edges.last.fetch("cursor")
             next if cursor && buffer.size == max_graphql_results
+
             break
           end
 
@@ -415,6 +430,7 @@ module Entitlements
             team_data[:slug]
           end
           return if @validation_cache[team_id] == team_slug
+
           raise "validate_team_id_and_slug! mismatch: team_id=#{team_id} expected=#{team_slug.inspect} got=#{@validation_cache[team_id].inspect}"
         end
 
@@ -432,10 +448,11 @@ module Entitlements
         ] => C::Bool
         def add_user_to_team(user:, team:, role: "member")
           return false unless org_members.include?(user.downcase)
-          unless role == "member" || role == "maintainer"
+          unless ["member", "maintainer"].include?(role)
             # :nocov:
             raise "add_user_to_team role mismatch: team_id=#{team.team_id} user=#{user} expected role=maintainer/member got=#{role}"
           end
+
           Entitlements.logger.debug "#{identifier} add_user_to_team(user=#{user}, org=#{org}, team_id=#{team.team_id}, role=#{role})"
           validate_team_id_and_slug!(team.team_id, team.team_name)
 
@@ -462,6 +479,7 @@ module Entitlements
         ] => C::Bool
         def remove_user_from_team(user:, team:)
           return false unless org_members.include?(user.downcase)
+
           Entitlements.logger.debug "#{identifier} remove_user_from_team(user=#{user}, org=#{org}, team_id=#{team.team_id})"
           validate_team_id_and_slug!(team.team_id, team.team_name)
           octokit.remove_team_membership(team.team_id, user)
