@@ -23,11 +23,11 @@ Gem::Specification.new do |s|
 
   s.add_development_dependency "entitlements-app", "~> 1.0"
   s.add_development_dependency "rake", "~> 13.2", ">= 13.2.1"
-  s.add_development_dependency "rspec", "= 3.8.0"
+  s.add_development_dependency "rspec", "= 3.13.0"
   s.add_development_dependency "rubocop", "~> 1.64"
   s.add_development_dependency "rubocop-github", "~> 0.20"
   s.add_development_dependency "rubocop-performance", "~> 1.21"
-  s.add_development_dependency "ruby-lsp", "~> 0.16.7"
+  s.add_development_dependency "ruby-lsp", "~> 0.17.3"
   s.add_development_dependency "rugged", "~> 1.7", ">= 1.7.2"
   s.add_development_dependency "simplecov", "~> 0.22.0"
   s.add_development_dependency "simplecov-erb", "~> 1.0", ">= 1.0.1"
