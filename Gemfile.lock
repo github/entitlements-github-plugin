@@ -75,7 +75,7 @@ GEM
     rbs (3.5.2)
       logger
     regexp_parser (2.9.2)
-    rexml (3.3.3)
+    rexml (3.3.6)
       strscan
     rspec (3.13.0)
       rspec-core (~> 3.13.0)
