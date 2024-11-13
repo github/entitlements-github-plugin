@@ -462,7 +462,7 @@ module Entitlements
           rescue Octokit::UnprocessableEntity => e
             raise e unless ignore_not_found && e.message =~ /Enterprise Managed Users must be part of the organization to be assigned to the team/
 
-            Entitlements.logger.warn "User #{user} not found in GitHub instance #{identifier}, ignoring."
+            Entitlements.logger.warn "User #{user} not found in organization #{org}, ignoring."
             false
           rescue Octokit::NotFound => e
             raise e unless ignore_not_found
