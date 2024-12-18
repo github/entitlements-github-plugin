@@ -8,18 +8,25 @@ require "webrick"
 require "webrick/https"
 require "openssl"
 
-webrick_options = {
-  Host: "0.0.0.0",
-  Port: 443,
-  Logger: WEBrick::Log::new($stderr, WEBrick::Log::DEBUG),
-  SSLEnable: true,
-  SSLVerifyClient: OpenSSL::SSL::VERIFY_NONE,
-  SSLCertificate: OpenSSL::X509::Certificate.new(File.read("/acceptance/github-server/ssl.crt")),
-  SSLPrivateKey: OpenSSL::PKey::RSA.new(File.read("/acceptance/github-server/ssl.key")),
-  SSLCertName: [["CN", "github.fake"]]
-}
-
 class FakeGitHubApi < Sinatra::Base
+  use Rack::RewindableInput::Middleware
+
+  set :server, %w[webrick]
+  set :server_settings, {
+    Host: "0.0.0.0",
+    Port: 443,
+    Logger: WEBrick::Log::new($stderr, WEBrick::Log::DEBUG),
+    SSLEnable: true,
+    SSLVerifyClient: OpenSSL::SSL::VERIFY_NONE,
+    SSLCertificate: OpenSSL::X509::Certificate.new(File.read("/acceptance/github-server/ssl.crt")),
+    SSLPrivateKey: OpenSSL::PKey::RSA.new(File.read("/acceptance/github-server/ssl.key")),
+    SSLCertName: [["CN", "github.fake"]]
+  }
+
+  set :port, 443
+  set :bind, "0.0.0.0"
+  set :host_authorization, { permitted_hosts: [] }
+
   BASE_DIR = "/tmp/github"
 
   TEAM_MAP_FILE = File.join(BASE_DIR, "team_map.json")
@@ -405,4 +412,4 @@ class FakeGitHubApi < Sinatra::Base
   end
 end
 
-Rack::Handler::WEBrick.run FakeGitHubApi, **webrick_options
+FakeGitHubApi.run!
