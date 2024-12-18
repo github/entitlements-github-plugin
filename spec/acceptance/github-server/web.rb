@@ -21,8 +21,8 @@ class FakeGitHubApi < Sinatra::Base
     SSLCertName: [["CN", "github.fake"]]
   }
 
-  set :port => 443
-  set :bind => "0.0.0.0"
+  set :port, 443
+  set :bind, "0.0.0.0"
 
   BASE_DIR = "/tmp/github"
 
