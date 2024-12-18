@@ -23,6 +23,7 @@ class FakeGitHubApi < Sinatra::Base
 
   set :port, 443
   set :bind, "0.0.0.0"
+  set :host_authorization, { permitted_hosts: [] }
 
   BASE_DIR = "/tmp/github"
 
