@@ -226,6 +226,7 @@ class FakeGitHubApi < Sinatra::Base
 
   send :put, "/entitlements-app-acceptance/orgs/:role" do
     org_dir = File.join(BASE_DIR, "org", params["role"])
+    request.body.rewind
     postdata = JSON.parse(request.body.read)
     Dir.glob(File.join(org_dir, "*")).each { |filename| FileUtils.rm_f(filename) }
     postdata["users"].each { |user| File.open(File.join(org_dir, user), "w") { |f| f.puts Time.now.to_s } }
@@ -234,6 +235,7 @@ class FakeGitHubApi < Sinatra::Base
 
   send :put, "/entitlements-app-acceptance/pending" do
     pending_dir = File.join(BASE_DIR, "pending")
+    request.body.rewind
     postdata = JSON.parse(request.body.read)
     Dir.glob(File.join(pending_dir, "*")).each { |filename| FileUtils.rm_f(filename) }
     postdata["users"].each { |user| File.open(File.join(pending_dir, user), "w") { |f| f.puts Time.now.to_s } }
@@ -258,6 +260,7 @@ class FakeGitHubApi < Sinatra::Base
   end
 
   send :post, "/graphql" do
+    request.body.rewind
     postdata = JSON.parse(request.body.read)
     query = postdata["query"]
 
@@ -296,6 +299,8 @@ class FakeGitHubApi < Sinatra::Base
     # Check for case sensitivity concerns
     halt 400 unless params["username"] == params["username"].downcase
 
+    # Pull out the role from the request body, halt if not provided.
+    request.body.rewind
     postdata = JSON.parse(request.body.read)
     halt 400 unless %[admin member].include?(postdata["role"])
 
