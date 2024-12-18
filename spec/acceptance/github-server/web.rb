@@ -9,6 +9,8 @@ require "webrick/https"
 require "openssl"
 
 class FakeGitHubApi < Sinatra::Base
+  use Rack::RewindableInput::Middleware
+
   set :server, %w[webrick]
   set :server_settings, {
     Host: "0.0.0.0",
