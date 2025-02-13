@@ -12,7 +12,8 @@ module Entitlements
       ORGANIZATION_ROLES = {
         "admin"  => "ADMIN",
         # `billing-manager` is currently not supported
-        "member" => "MEMBER"
+        "member" => "MEMBER",
+        "security-manager" => "SECURITY-MANAGER"
       }
 
       # Error classes
