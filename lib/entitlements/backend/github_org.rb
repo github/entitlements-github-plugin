@@ -13,7 +13,7 @@ module Entitlements
         "admin"  => "ADMIN",
         # `billing-manager` is currently not supported
         "member" => "MEMBER",
-        "security-manager" => "SECURITY-MANAGER"
+        "security_manager" => "SECURITY-MANAGER"
       }
 
       # Error classes
