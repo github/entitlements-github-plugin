@@ -394,6 +394,32 @@ module Entitlements
         MAX_GRAPHQL_RESULTS
       end
       # :nocov:
+
+      Contract C::None => C::ArrayOf[Hash]
+      def org_roles
+        Entitlements.cache[:github_org_roles][org_signature] ||= begin
+          octokit.get("/orgs/#{@org}/organization-roles")
+        end
+      end
+
+      Contract String => C::Maybe[Hash]
+      def org_role(role)
+        org_roles.find { |r| r[:name] == role }
+      end
+
+      Contract String, String => C::Any
+      def add_role_to_user(user, role)
+        role_id = org_role(role)[:id]
+        octokit.put("/orgs/#{org_name}/organization-roles/users/#{user}/#{role_id}")
+      end
+
+      Contract String => C::ArrayOf[Hash]
+      def users_with_role(role)
+        role_id = org_role(role)[:id]
+        Entitlements.cache[:github_org_role_users][org_signature][role] ||= begin
+          octokit.get("/orgs/#{org_name}/organization-roles/#{role_id}/users")
+        end
+      end
     end
   end
 end
