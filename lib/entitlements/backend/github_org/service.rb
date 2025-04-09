@@ -35,6 +35,23 @@ module Entitlements
 
         private
 
+        Contract String, String => C::HashOf[Symbol, C::Any]
+        def add_user_to_role(user, role)
+          if role == "security_manager"
+            octokit.add_role_to_user(user, role)
+
+            # This is a hack to get around the fact that the GitHub API
+            # has two different concepts of organization roles,
+            # and the one we want to use is not present in organization memberships.
+            #
+            # If we get here, we know that the user is already member of the organization,
+            # and we know that the user has been successfully granted the role.
+            { user:, role:, state: "active" }
+          else
+            octokit.update_organization_membership(org, user:, role:)
+          end
+        end
+
         # Upsert a user with a role to the organization.
         #
         # user: A String with the (GitHub) username of the person to add or modify.
@@ -46,8 +63,19 @@ module Entitlements
           Entitlements.logger.debug "#{identifier} add_user_to_organization(user=#{user}, org=#{org}, role=#{role})"
 
           begin
-            new_membership = octokit.update_organization_membership(org, user:, role:)
+            new_membership = add_role_to_user(user, role)
           rescue Octokit::NotFound => e
+            raise e unless ignore_not_found
+
+            Entitlements.logger.warn "User #{user} not found in GitHub instance #{identifier}, ignoring."
+            return false
+          rescue Octokit::UnprocessableEntity => e
+            # Two conditions can cause this:
+            # - If the role is not enabled, we'll get a 422.
+            # - If the user is not a member of the organization, we'll get a 422.
+
+            # We'll loop this under ignore_not_found
+            # since this affects the case where we want to add a user to security_manager role
             raise e unless ignore_not_found
 
             Entitlements.logger.warn "User #{user} not found in GitHub instance #{identifier}, ignoring."

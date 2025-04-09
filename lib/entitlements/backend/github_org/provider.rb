@@ -104,7 +104,15 @@ module Entitlements
         # Returns an Entitlements::Models::Group object.
         Contract String => Entitlements::Models::Group
         def role_to_group(role)
-          members = github.org_members.keys.select { |username| github.org_members[username] == role }
+          # The security_manager role is a special case because it is not a role that is
+          # part of the org membership API. Instead, it is a role that is assigned to users via
+          # the org role API.
+          if role == "security_manager"
+            members = github.users_with_role(role)
+          else
+            members = github.org_members.keys.select { |username| github.org_members[username] == role }
+          end
+
           Entitlements::Models::Group.new(
             dn: role_dn(role),
             members: Set.new(members),
