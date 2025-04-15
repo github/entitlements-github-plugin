@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../config/retry"
+
 require "net/http"
 require "octokit"
 require "uri"
@@ -36,6 +38,9 @@ module Entitlements
         ignore_not_found: C::Maybe[C::Bool],
       ] => C::Any
       def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
+        # init the retry module
+        Retry.setup!
+
         # Save some parameters for the connection but don't actually connect yet.
         @addr = addr
         @org = org
@@ -247,10 +252,22 @@ module Entitlements
       def members_and_roles_from_rest
         Entitlements.logger.debug "Loading organization members and roles for #{org}"
         result = {}
-        octokit.organization_members(org, { role: "admin" }).each do |member|
+
+        # fetch all the admin members from the org
+        admin_members = Retryable.with_context(:default) do
+          octokit.organization_members(org, { role: "admin" })
+        end
+
+        # fetch all the regular members from the org
+        regular_members = Retryable.with_context(:default) do
+          octokit.organization_members(org, { role: "member" })
+        end
+
+        admin_members.each do |member|
           result[member[:login].downcase] = "ADMIN"
         end
-        octokit.organization_members(org, { role: "member" }).each do |member|
+
+        regular_members.each do |member|
           result[member[:login].downcase] = "MEMBER"
         end
 
