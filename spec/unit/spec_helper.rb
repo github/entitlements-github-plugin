@@ -184,6 +184,11 @@ RSpec.configure do |config|
 
   config.before :each do
     allow(Time).to receive(:now).and_return(Time.utc(2018, 4, 1, 12, 0, 0))
+
+    allow(Kernel).to receive(:sleep)
+    allow_any_instance_of(Kernel).to receive(:sleep)
+    allow_any_instance_of(Object).to receive(:sleep)
+
     allow(Entitlements).to receive(:cache).and_return(cache)
     if entitlements_config_hash
       Entitlements.config = entitlements_config_hash

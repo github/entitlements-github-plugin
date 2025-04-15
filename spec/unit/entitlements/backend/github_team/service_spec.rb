@@ -845,7 +845,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "does not handle octokit error" do
       exc = StandardError.new("Whoops!")
       allow(subject).to receive(:octokit).and_return(octokit)
-      expect(octokit).to receive(:team).with(1234).and_raise(exc)
+      expect(octokit).to receive(:team).with(1234).and_raise(exc).exactly(3).times
 
       expect do
         subject.send(:validate_team_id_and_slug!, 1234, "my-slug")
