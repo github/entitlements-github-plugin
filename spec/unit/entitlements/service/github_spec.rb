@@ -223,6 +223,54 @@ describe Entitlements::Service::GitHub do
         expect(result).to eq({"ocicat"=>"MEMBER", "blackmanx"=>"MEMBER", "toyger"=>"MEMBER", "highlander"=>"MEMBER", "russianblue"=>"MEMBER", "ragamuffin"=>"MEMBER", "monalisa"=>"ADMIN", "peterbald"=>"MEMBER", "mainecoon"=>"MEMBER", "laperm"=>"MEMBER"})
       end
     end
+
+    context "when there are no admins" do
+      let(:members) { %w[ocicat blackmanx] }
+      let(:octokit) { instance_double(Octokit::Client) }
+      it "returns only members" do
+        expect(subject).to receive(:octokit).and_return(octokit).twice
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return([])
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: } })
+        result = subject.send(:members_and_roles_from_rest)
+        expect(result).to eq({"ocicat"=>"MEMBER", "blackmanx"=>"MEMBER"})
+      end
+    end
+
+    context "when there are no members" do
+      let(:admins) { %w[monalisa] }
+      let(:octokit) { instance_double(Octokit::Client) }
+      it "returns only admins" do
+        expect(subject).to receive(:octokit).and_return(octokit).twice
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return(admins.map { |login| { login: } })
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return([])
+        result = subject.send(:members_and_roles_from_rest)
+        expect(result).to eq({"monalisa"=>"ADMIN"})
+      end
+    end
+
+    context "when usernames have different cases" do
+      let(:admins) { ["Monalisa"] }
+      let(:members) { ["OCICAT", "BlackManx"] }
+      let(:octokit) { instance_double(Octokit::Client) }
+      it "downcases all usernames" do
+        expect(subject).to receive(:octokit).and_return(octokit).twice
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return(admins.map { |login| { login: } })
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: } })
+        result = subject.send(:members_and_roles_from_rest)
+        expect(result).to eq({"monalisa"=>"ADMIN", "ocicat"=>"MEMBER", "blackmanx"=>"MEMBER"})
+      end
+    end
+
+    context "when organization is empty" do
+      let(:octokit) { instance_double(Octokit::Client) }
+      it "returns an empty hash" do
+        expect(subject).to receive(:octokit).and_return(octokit).twice
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return([])
+        expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return([])
+        result = subject.send(:members_and_roles_from_rest)
+        expect(result).to eq({})
+      end
+    end
   end
 
   describe "#pending_members_from_graphql" do
