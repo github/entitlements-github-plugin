@@ -163,6 +163,7 @@ module Entitlements
           client = Octokit::Client.new(access_token: token)
           client.api_endpoint = addr if addr
           client.auto_paginate = true
+          client.per_page = 100
           Entitlements.logger.debug "Setting up GitHub API connection to #{client.api_endpoint}"
           client
         end
