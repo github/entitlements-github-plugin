@@ -99,7 +99,10 @@ module Entitlements
       # Returns true if the github instance is an enterprise server instance
       Contract C::None => C::Bool
       def enterprise?
-        meta = octokit.github_meta
+        meta = Retryable.with_context(:default) do
+          octokit.github_meta
+        end
+
         meta.key? :installed_version
       end
 
