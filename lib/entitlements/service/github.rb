@@ -246,8 +246,7 @@ module Entitlements
       def members_and_roles_from_rest
         Entitlements.logger.debug "Loading organization members and roles for #{org}"
         result = {}
-        members = octokit.organization_members(org, { role: "admin" })
-        members.each do |member|
+        octokit.organization_members(org, { role: "admin" }).each do |member|
           result[member[:login].downcase] = "ADMIN"
         end
         octokit.organization_members(org, { role: "member" }).each do |member|
