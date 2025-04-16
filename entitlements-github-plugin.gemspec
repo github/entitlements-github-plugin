@@ -20,6 +20,7 @@ Gem::Specification.new do |s|
   s.add_dependency "faraday", "~> 2.0"
   s.add_dependency "faraday-retry", "~> 2.0"
   s.add_dependency "octokit", "~> 4.25"
+  s.add_dependency "retryable", "~> 3.0", ">= 3.0.5"
 
   s.add_development_dependency "entitlements-app", "~> 1.0"
   s.add_development_dependency "rake", "~> 13.2", ">= 13.2.1"

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../config/retry"
+
 require "net/http"
 require "octokit"
 require "uri"
@@ -36,6 +38,9 @@ module Entitlements
         ignore_not_found: C::Maybe[C::Bool],
       ] => C::Any
       def initialize(addr: nil, org:, token:, ou:, ignore_not_found: false)
+        # init the retry module
+        Retry.setup!
+
         # Save some parameters for the connection but don't actually connect yet.
         @addr = addr
         @org = org
@@ -94,7 +99,10 @@ module Entitlements
       # Returns true if the github instance is an enterprise server instance
       Contract C::None => C::Bool
       def enterprise?
-        meta = octokit.github_meta
+        meta = Retryable.with_context(:default) do
+          octokit.github_meta
+        end
+
         meta.key? :installed_version
       end
 
@@ -163,6 +171,7 @@ module Entitlements
           client = Octokit::Client.new(access_token: token)
           client.api_endpoint = addr if addr
           client.auto_paginate = true
+          client.per_page = 100
           Entitlements.logger.debug "Setting up GitHub API connection to #{client.api_endpoint}"
           client
         end
@@ -246,11 +255,22 @@ module Entitlements
       def members_and_roles_from_rest
         Entitlements.logger.debug "Loading organization members and roles for #{org}"
         result = {}
-        members = octokit.organization_members(org, { role: "admin" })
-        members.each do |member|
+
+        # fetch all the admin members from the org
+        admin_members = Retryable.with_context(:default) do
+          octokit.organization_members(org, { role: "admin" })
+        end
+
+        # fetch all the regular members from the org
+        regular_members = Retryable.with_context(:default) do
+          octokit.organization_members(org, { role: "member" })
+        end
+
+        admin_members.each do |member|
           result[member[:login].downcase] = "ADMIN"
         end
-        octokit.organization_members(org, { role: "member" }).each do |member|
+
+        regular_members.each do |member|
           result[member[:login].downcase] = "MEMBER"
         end
 

@@ -1,11 +1,12 @@
 PATH
   remote: .
   specs:
-    entitlements-github-plugin (1.1.0)
+    entitlements-github-plugin (1.2.0)
       contracts (~> 0.17.0)
       faraday (~> 2.0)
       faraday-retry (~> 2.0)
       octokit (~> 4.25)
+      retryable (~> 3.0, >= 3.0.5)
 
 GEM
   remote: https://rubygems.org/
@@ -79,6 +80,7 @@ GEM
     rbs (3.6.1)
       logger
     regexp_parser (2.9.2)
+    retryable (3.0.5)
     rexml (3.3.9)
     rspec (3.13.0)
       rspec-core (~> 3.13.0)

@@ -46,7 +46,9 @@ module Entitlements
           Entitlements.logger.debug "#{identifier} add_user_to_organization(user=#{user}, org=#{org}, role=#{role})"
 
           begin
-            new_membership = octokit.update_organization_membership(org, user:, role:)
+            new_membership = Retryable.with_context(:default, not: [Octokit::NotFound]) do
+              octokit.update_organization_membership(org, user:, role:)
+            end
           rescue Octokit::NotFound => e
             raise e unless ignore_not_found
 
@@ -78,7 +80,10 @@ module Entitlements
         Contract String => C::Bool
         def remove_user_from_organization(user)
           Entitlements.logger.debug "#{identifier} remove_user_from_organization(user=#{user}, org=#{org})"
-          result = octokit.remove_organization_membership(org, user:)
+
+          result = Retryable.with_context(:default) do
+            octokit.remove_organization_membership(org, user:)
+          end
 
           # If we removed the user, remove them from the cache of members, so that any GitHub team
           # operations in this organization will ignore this user.

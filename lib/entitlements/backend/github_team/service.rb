@@ -279,10 +279,12 @@ module Entitlements
                 team_options[:parent_team_id] = parent_team_data[:team_id]
               rescue TeamNotFound
                 # if the parent team does not exist, create it (think `mkdir -p` logic here)
-                result = octokit.create_team(
-                  org,
-                  { name: entitlement_metadata["parent_team_name"], repo_names: [], privacy: "closed" }
-                )
+                result = Retryable.with_context(:default, not: [Octokit::UnprocessableEntity]) do
+                  octokit.create_team(
+                    org,
+                    { name: entitlement_metadata["parent_team_name"], repo_names: [], privacy: "closed" }
+                  )
+                end
 
                 Entitlements.logger.debug "created parent team #{entitlement_metadata["parent_team_name"]} with id #{result[:id]}"
 
@@ -296,7 +298,11 @@ module Entitlements
           end
 
           Entitlements.logger.debug "create_team(team=#{team_name})"
-          result = octokit.create_team(org, team_options)
+
+          result = Retryable.with_context(:default, not: [Octokit::UnprocessableEntity]) do
+            octokit.create_team(org, team_options)
+          end
+
           Entitlements.logger.debug "created team #{team_name} with id #{result[:id]}"
           true
         rescue Octokit::UnprocessableEntity => e
@@ -317,7 +323,10 @@ module Entitlements
           Entitlements.logger.debug "update_team(team=#{team.team_name})"
           options = { name: team.team_name, repo_names: [], privacy: "closed",
                       parent_team_id: metadata[:parent_team_id] }
-          octokit.update_team(team.team_id, options)
+          Retryable.with_context(:default, not: [Octokit::UnprocessableEntity]) do
+            octokit.update_team(team.team_id, options)
+          end
+
           true
         rescue Octokit::UnprocessableEntity => e
           Entitlements.logger.debug "update_team(team=#{team.team_name}) ERROR - #{e.message}"
@@ -334,7 +343,9 @@ module Entitlements
                    team_name: String
                  ] => Sawyer::Resource
         def team_by_name(org_name:, team_name:)
-          octokit.team_by_name(org_name, team_name)
+          Retryable.with_context(:default) do
+            octokit.team_by_name(org_name, team_name)
+          end
         end
 
         private
@@ -426,7 +437,10 @@ module Entitlements
           @validation_cache ||= {}
           @validation_cache[team_id] ||= begin
             Entitlements.logger.debug "validate_team_id_and_slug!(#{team_id}, #{team_slug.inspect})"
-            team_data = octokit.team(team_id)
+            team_data = Retryable.with_context(:default) do
+              octokit.team(team_id)
+            end
+
             team_data[:slug]
           end
           return if @validation_cache[team_id] == team_slug
@@ -457,7 +471,10 @@ module Entitlements
           validate_team_id_and_slug!(team.team_id, team.team_name)
 
           begin
-            result = octokit.add_team_membership(team.team_id, user, role:)
+            result = Retryable.with_context(:default, not: [Octokit::UnprocessableEntity, Octokit::NotFound]) do
+              octokit.add_team_membership(team.team_id, user, role:)
+            end
+
             result[:state] == "active" || result[:state] == "pending"
           rescue Octokit::UnprocessableEntity => e
             raise e unless ignore_not_found && e.message =~ /Enterprise Managed Users must be part of the organization to be assigned to the team/
@@ -487,7 +504,10 @@ module Entitlements
 
           Entitlements.logger.debug "#{identifier} remove_user_from_team(user=#{user}, org=#{org}, team_id=#{team.team_id})"
           validate_team_id_and_slug!(team.team_id, team.team_name)
-          octokit.remove_team_membership(team.team_id, user)
+
+          Retryable.with_context(:default) do
+            octokit.remove_team_membership(team.team_id, user)
+          end
         end
       end
     end

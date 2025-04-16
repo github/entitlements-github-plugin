@@ -24,3 +24,5 @@ end
 require_relative "github_org/controller"
 require_relative "github_org/provider"
 require_relative "github_org/service"
+require_relative "../config/retry"
+Retry.setup!
