@@ -406,9 +406,11 @@ class FakeGitHubApi < Sinatra::Base
   end
 
   [:get, :patch, :put, :delete, :post].each do |verb|
+    # rubocop:disable GitHub/AvoidObjectSendWithDynamicMethod
     send verb, "/*" do
       raise "No route registered for #{params}. Take a look in #{__FILE__}"
     end
+    # rubocop:enable GitHub/AvoidObjectSendWithDynamicMethod
   end
 end
 
