@@ -151,10 +151,10 @@ describe Entitlements::Backend::GitHubOrg::Controller do
     context "with pending members" do
       let(:org1_members_response) do
         {
-          "toyger"      => "admin",
-          "highlander"    => "admin",
-          "blackmanx"  => "member",
-          "russianblue"   => "member"
+          "toyger" => "admin",
+          "highlander" => "admin",
+          "blackmanx" => "member",
+          "russianblue" => "member"
         }
       end
 
@@ -162,7 +162,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
       let(:org2_members_response) do
         {
-          "russianblue"  => "admin"
+          "russianblue" => "admin"
         }
       end
 
@@ -182,7 +182,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
       it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -267,7 +267,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
       it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -318,21 +318,21 @@ describe Entitlements::Backend::GitHubOrg::Controller do
         {
           "ragamuffin"   => "admin",
           "mainecoon"    => "admin",
-          "blackmanx"     => "member",
-          "highlander"       => "member",
+          "blackmanx" => "member",
+          "highlander" => "member",
           "peterbald" => "member"
         }
       end
 
       let(:org2_members_response) do
         {
-          "russianblue"  => "admin"
+          "russianblue" => "admin"
         }
       end
 
       it "does not run actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -378,7 +378,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         it "handles removals and role changes but does not invite" do
           allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-            .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "features"=>%w[remove], "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+            .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "features" => %w[remove], "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
             .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -414,8 +414,8 @@ describe Entitlements::Backend::GitHubOrg::Controller do
             "MAINECOON"
           ]))
           expect(result[0].implementation).to eq([
-            { action: :add, person: "RagaMuffin"},
-            { action: :remove, person: "russianblue"}
+            { action: :add, person: "RagaMuffin" },
+            { action: :remove, person: "russianblue" }
           ])
 
           expect(result[1]).to be_a_kind_of(Entitlements::Models::Action)
@@ -425,7 +425,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
             "peterbald"
           ]))
           expect(result[1].implementation).to eq([
-            { action: :remove, person: "toyger"}
+            { action: :remove, person: "toyger" }
           ])
         end
       end
@@ -441,7 +441,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         it "reports as a no-op" do
           allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-            .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "features"=>%w[remove], "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+            .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "features" => %w[remove], "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
             .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -490,7 +490,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         it "handles removals and role changes but does not invite" do
           allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-            .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "features"=>%w[invite], "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+            .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "features" => %w[invite], "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
             .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -527,7 +527,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
             "MAINECOON"
           ]))
           expect(result[0].implementation).to eq([
-            { action: :add, person: "RagaMuffin"}
+            { action: :add, person: "RagaMuffin" }
           ])
 
           expect(result[1]).to be_a_kind_of(Entitlements::Models::Action)
@@ -539,7 +539,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
             "peterbald"
           ]))
           expect(result[1].implementation).to eq([
-            { action: :add, person: "blackmanx"}
+            { action: :add, person: "blackmanx" }
           ])
         end
       end
@@ -559,7 +559,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         it "reports as a no-op" do
           allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-            .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "features"=>%w[invite], "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+            .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "features" => %w[invite], "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
             .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -595,7 +595,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
         cache[:predictive_state] = { by_dn: { org1_admin_dn => { members: admins, metadata: nil }, org1_member_dn => { members:, metadata: nil } }, invalid: Set.new }
 
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githuborg", { "base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
 
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
@@ -666,7 +666,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         it "handles removals and role changes but does not invite" do
           allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-            .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "features"=>[], "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+            .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "features" => [], "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
             .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -702,7 +702,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
             "MAINECOON"
           ]))
           expect(result[0].implementation).to eq([
-            { action: :add, person: "RagaMuffin"}
+            { action: :add, person: "RagaMuffin" }
           ])
 
           expect(result[1]).to be_a_kind_of(Entitlements::Models::Action)
@@ -729,7 +729,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         it "reports as a no-op" do
           allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-            .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "features"=>[], "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+            .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "features" => [], "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
             .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
           allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
@@ -840,7 +840,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
   describe "#validate_github_org_ous!" do
     it "raises if an admin or member group is missing" do
       allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-        .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+        .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
         .and_return(Set.new(%w[member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
 
       github_double = instance_double(Entitlements::Backend::GitHubOrg::Provider)
@@ -860,7 +860,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
       dns = %w[admin member kittens cats].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }
 
       allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-        .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+        .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
         .and_return(Set.new(dns))
 
       allow(Entitlements::Backend::GitHubOrg::Service).to receive(:new).and_return(service)
@@ -900,7 +900,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
     it "raises due to duplicate users" do
       allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-        .with("foo-githuborg", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+        .with("foo-githuborg", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
         .and_return(Set.new(%w[admin member].map { |cn| "cn=#{cn},ou=kittensinc,ou=GitHub,dc=github,dc=com" }))
       allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(admin_dn).and_return(admin_group)
       allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(member_dn).and_return(member_group)

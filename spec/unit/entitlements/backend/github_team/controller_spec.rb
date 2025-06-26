@@ -35,7 +35,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         team_name: "russian-blues",
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=com",
         members: Set.new(%w[blackmanx MAINECOON]),
-        metadata: {"team_id" => 1001}
+        metadata: { "team_id" => 1001 }
       )
     end
 
@@ -44,7 +44,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         dn: "cn=russian-blues,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
         description: ":smile_cat:",
         members: Set.new(%w[blackmanx MAINECOON]),
-        metadata: {"team_id" => 1001}
+        metadata: { "team_id" => 1001 }
       )
     end
 
@@ -54,7 +54,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         team_name: "snowshoes",
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=com",
         members: Set.new(%w[blackmanx MAINECOON]),
-        metadata: {"team_id" => 1002}
+        metadata: { "team_id" => 1002 }
       )
     end
 
@@ -63,7 +63,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         dn: "cn=snowshoes,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
         description: ":smile_cat:",
         members: Set.new(%w[blackmanx MAINECOON]),
-        metadata: {"team_id" => 1002}
+        metadata: { "team_id" => 1002 }
       )
     end
 
@@ -73,7 +73,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
        team_name: "chicken",
        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
        members: Set.new(%w[blackmanx]),
-       metadata: {"team_id" => 10001}
+       metadata: { "team_id" => 10001 }
      )
     end
 
@@ -82,7 +82,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         dn: "cn=chicken,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
         description: ":smile_cat:",
         members: Set.new(%w[blackmanx]),
-        metadata: {"team_id" => 10001}
+        metadata: { "team_id" => 10001 }
       )
     end
 
@@ -111,7 +111,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
 
       it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githubteam", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[snowshoes russian-blues]))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("snowshoes").and_return(snowshoe_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("russian-blues").and_return(russian_blue_group)
@@ -159,7 +159,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
 
       it "does not run actions if there are no diffs detected" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githubteam", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[russian-blues]))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("russian-blues").and_return(russian_blue_group)
         allow(Entitlements::Util::Util).to receive(:dns_for_ou).with("foo-githubteam", anything).and_return([russian_blue_group.dn])
@@ -205,7 +205,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
 
       it "logs expected output and returns expected actions" do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
-          .with("foo-githubteam", {"base"=>"ou=kittensinc,ou=GitHub,dc=github,dc=com", "org"=>"kittensinc", "token"=>"CuteAndCuddlyKittens", "ignore_not_found"=>false})
+          .with("foo-githubteam", { "base" => "ou=kittensinc,ou=GitHub,dc=github,dc=com", "org" => "kittensinc", "token" => "CuteAndCuddlyKittens", "ignore_not_found" => false })
           .and_return(Set.new(%w[snowshoes russian-blues]))
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("snowshoes").and_return(snowshoe_group)
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with("russian-blues").and_return(russian_blue_group)
