@@ -345,7 +345,7 @@ module Entitlements
             return result
           else
             Entitlements.logger.warn "GraphQL failed on try #{try_number} of #{MAX_GRAPHQL_RETRIES}. Will retry."
-            sleep WAIT_BETWEEN_GRAPHQL_RETRIES * (2 ** (try_number - 1))
+            sleep WAIT_BETWEEN_GRAPHQL_RETRIES * (2**(try_number - 1))
           end
         end
       end
