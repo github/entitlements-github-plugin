@@ -195,7 +195,7 @@ describe Entitlements::Service::GitHub do
           to_return(status: 200, body: File.read(fixture("graphql-output/organization-members-page4.json")))
 
         result = subject.send(:members_and_roles_from_graphql)
-        expect(result).to eq({"ocicat"=>"MEMBER", "blackmanx"=>"MEMBER", "toyger"=>"MEMBER", "highlander"=>"MEMBER", "russianblue"=>"MEMBER", "ragamuffin"=>"MEMBER", "monalisa"=>"ADMIN", "peterbald"=>"MEMBER", "mainecoon"=>"MEMBER", "laperm"=>"MEMBER"})
+        expect(result).to eq({ "ocicat" => "MEMBER", "blackmanx" => "MEMBER", "toyger" => "MEMBER", "highlander" => "MEMBER", "russianblue" => "MEMBER", "ragamuffin" => "MEMBER", "monalisa" => "ADMIN", "peterbald" => "MEMBER", "mainecoon" => "MEMBER", "laperm" => "MEMBER" })
       end
     end
 
@@ -220,7 +220,7 @@ describe Entitlements::Service::GitHub do
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: } })
 
         result = subject.send(:members_and_roles_from_rest)
-        expect(result).to eq({"ocicat"=>"MEMBER", "blackmanx"=>"MEMBER", "toyger"=>"MEMBER", "highlander"=>"MEMBER", "russianblue"=>"MEMBER", "ragamuffin"=>"MEMBER", "monalisa"=>"ADMIN", "peterbald"=>"MEMBER", "mainecoon"=>"MEMBER", "laperm"=>"MEMBER"})
+        expect(result).to eq({ "ocicat" => "MEMBER", "blackmanx" => "MEMBER", "toyger" => "MEMBER", "highlander" => "MEMBER", "russianblue" => "MEMBER", "ragamuffin" => "MEMBER", "monalisa" => "ADMIN", "peterbald" => "MEMBER", "mainecoon" => "MEMBER", "laperm" => "MEMBER" })
       end
     end
 
@@ -232,7 +232,7 @@ describe Entitlements::Service::GitHub do
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return([])
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: } })
         result = subject.send(:members_and_roles_from_rest)
-        expect(result).to eq({"ocicat"=>"MEMBER", "blackmanx"=>"MEMBER"})
+        expect(result).to eq({ "ocicat" => "MEMBER", "blackmanx" => "MEMBER" })
       end
     end
 
@@ -244,7 +244,7 @@ describe Entitlements::Service::GitHub do
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return(admins.map { |login| { login: } })
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return([])
         result = subject.send(:members_and_roles_from_rest)
-        expect(result).to eq({"monalisa"=>"ADMIN"})
+        expect(result).to eq({ "monalisa" => "ADMIN" })
       end
     end
 
@@ -257,7 +257,7 @@ describe Entitlements::Service::GitHub do
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "admin" }).and_return(admins.map { |login| { login: } })
         expect(octokit).to receive(:organization_members).with("kittensinc", { role: "member" }).and_return(members.map { |login| { login: } })
         result = subject.send(:members_and_roles_from_rest)
-        expect(result).to eq({"monalisa"=>"ADMIN", "ocicat"=>"MEMBER", "blackmanx"=>"MEMBER"})
+        expect(result).to eq({ "monalisa" => "ADMIN", "ocicat" => "MEMBER", "blackmanx" => "MEMBER" })
       end
     end
 
