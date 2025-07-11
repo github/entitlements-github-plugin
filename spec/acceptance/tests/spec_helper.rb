@@ -83,7 +83,7 @@ def ldap_obj
       host: uri.host,
       port: uri.port,
       encryption: (uri.scheme == "ldaps" ? :simple_tls : nil),
-      auth: {method: :simple, username: ENV["LDAP_BINDDN"], password: ENV["LDAP_BINDPW"]}
+      auth: { method: :simple, username: ENV["LDAP_BINDDN"], password: ENV["LDAP_BINDPW"] }
     )
 
     ldap_object.bind
