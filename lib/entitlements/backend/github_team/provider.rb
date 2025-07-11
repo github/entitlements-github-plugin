@@ -162,7 +162,7 @@ module Entitlements
             metadata = entitlement_group.metadata
             metadata["team_id"] = -999
           rescue Entitlements::Models::Group::NoMetadata
-            metadata = {"team_id" => -999}
+            metadata = { "team_id" => -999 }
           end
           Entitlements::Backend::GitHubTeam::Models::Team.new(
             team_id: -999,

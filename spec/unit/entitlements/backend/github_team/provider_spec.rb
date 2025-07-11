@@ -20,8 +20,8 @@ describe Entitlements::Backend::GitHubTeam::Provider do
   let(:russian_blue) { Entitlements::Models::Person.new(uid: "russian_blue") }
   let(:members) { Set.new(%w[SnowShoe russian_blue]) }
   let(:dn) { "cn=cats,ou=Github,dc=github,dc=fake" }
-  let(:group) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([snowshoe, russian_blue]), metadata: {"application_owner" => "russian_blue"}) }
-  let(:team) { Entitlements::Backend::GitHubTeam::Models::Team.new(team_id: 1001, team_name: "cats", members:, ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake", metadata: {"application_owner" => "russian_blue"}) }
+  let(:group) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([snowshoe, russian_blue]), metadata: { "application_owner" => "russian_blue" }) }
+  let(:team) { Entitlements::Backend::GitHubTeam::Models::Team.new(team_id: 1001, team_name: "cats", members:, ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake", metadata: { "application_owner" => "russian_blue" }) }
   let(:member_strings_set) { Set.new(members.map(&:downcase)) }
   let(:subject) { described_class.new(config: provider_config) }
 
@@ -51,7 +51,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
     end
 
     it "returns the additional metadata from the entitlement" do
-      metadata = {"application_owner" => "russian_blue"}
+      metadata = { "application_owner" => "russian_blue" }
       allow(subject).to receive(:github).and_return(github)
       expect(github).to receive(:read_team).with(entitlement_group_double).and_return(team)
       expect(logger).to receive(:debug).with("Loaded cn=cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake (id=1001) with 2 member(s)")
@@ -164,7 +164,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
       let(:new_members) { Set.new(%w[snowshoe russianblue]) }
 
       it "accurately computes changes" do
-        cache[:predictive_state] = { by_dn: { }, invalid: Set.new }
+        cache[:predictive_state] = { by_dn: {}, invalid: Set.new }
 
         entitlement_group = Entitlements::Models::Group.new(
           dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
@@ -261,7 +261,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
 
       allow(subject).to receive(:github).and_return(github)
       expect(github).to receive(:read_team).with(entitlement_group).and_return(nil)
-      expect(github).to receive(:create_team).with({entitlement_group:}).and_return(true)
+      expect(github).to receive(:create_team).with({ entitlement_group: }).and_return(true)
       expect(github).to receive(:invalidate_predictive_cache).with(entitlement_group).and_return(nil)
       expect(github).to receive(:read_team).with(entitlement_group).and_return(github_team)
       expect(github).to receive(:sync_team).with(entitlement_group, github_team).and_return(true)
@@ -320,7 +320,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
       entitlements_group = Entitlements::Models::Group.new(
         dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
         members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
-        metadata: { }
+        metadata: {}
       )
 
       github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
@@ -351,7 +351,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         team_name: "diff-cats",
         members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
-        metadata: { }
+        metadata: {}
       )
 
       result = subject.diff_existing_updated(entitlements_group, github_team)
@@ -389,7 +389,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
       entitlements_group = Entitlements::Models::Group.new(
         dn: "cn=diff-cats,ou=Github,dc=github,dc=fake",
         members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
-        metadata: { }
+        metadata: {}
       )
 
       github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
@@ -420,7 +420,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         team_name: "diff-cats",
         members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
-        metadata: { }
+        metadata: {}
       )
 
       result = subject.diff_existing_updated(entitlements_group, github_team)
@@ -459,7 +459,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
       entitlement_group = Entitlements::Models::Group.new(
         dn: "cn=new-kittens,ou=Github,dc=github,dc=fake",
         members: Set.new(%w[cuddles fluffy morris WHISKERS].map { |u| "uid=#{u},ou=People,dc=kittens,dc=net" }),
-        metadata: { }
+        metadata: {}
       )
 
       github_team = Entitlements::Backend::GitHubTeam::Models::Team.new(
@@ -467,7 +467,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         team_name: "new-kittens",
         members: Set.new,
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
-        metadata: {"team_id" => -999}
+        metadata: { "team_id" => -999 }
       )
 
       result = subject.send(:create_github_team_group, entitlement_group)
@@ -486,7 +486,7 @@ describe Entitlements::Backend::GitHubTeam::Provider do
         team_name: "new-kittens",
         members: Set.new,
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
-        metadata: {"team_id" => -999}
+        metadata: { "team_id" => -999 }
       )
 
       result = subject.send(:create_github_team_group, entitlement_group)
