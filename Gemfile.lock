@@ -47,7 +47,7 @@ GEM
       octokit (~> 4.18)
       optimist (~> 3.1)
       ostruct (~> 0.6.0)
-    faraday (2.13.2)
+    faraday (2.13.4)
       faraday-net_http (>= 2.0, < 3.5)
       json
       logger
@@ -58,7 +58,7 @@ GEM
     hashdiff (1.2.0)
     i18n (1.14.7)
       concurrent-ruby (~> 1.0)
-    json (2.12.2)
+    json (2.13.2)
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)
     logger (1.7.0)
