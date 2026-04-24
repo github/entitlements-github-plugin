@@ -1,4 +1,4 @@
-version: '2'
+version: "2"
 
 networks:
   ldap-network:
@@ -31,7 +31,7 @@ services:
 
   ldap-server:
     entrypoint: /acceptance/ldap-server/run-server.sh
-    image: osixia/openldap:1.2.2
+    image: osixia/openldap:1.5.0
     networks:
       ldap-network:
         aliases:
