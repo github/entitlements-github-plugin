@@ -362,22 +362,6 @@ module Entitlements
         result[:code] >= 500
       end
 
-      # Helper: log `message` to `Entitlements.logger` at the given severity. Restricts
-      # the dispatch to a known set of severities so callers can pick a level computed
-      # at runtime without going through `send`/`public_send`.
-      #
-      # severity - Symbol, one of :warn or :error.
-      # message  - String message to log.
-      #
-      # Returns nothing.
-      Contract C::Or[:warn, :error], String => C::Any
-      def log_at_severity(severity, message)
-        case severity
-        when :warn then Entitlements.logger.warn(message)
-        when :error then Entitlements.logger.error(message)
-        end
-      end
-
       # Helper method: Do the HTTP POST to the GitHub API for GraphQL.
       #
       # query - String with the data to be posted.
@@ -401,9 +385,8 @@ module Entitlements
             # The retry wrapper retries on 5xx, so log those at WARN to avoid misleading
             # the operator with an ERROR for a transient failure that we recover from.
             # Terminal non-2xx responses (4xx) stay at ERROR.
-            severity = response.code.start_with?("5") ? :warn : :error
-            log_at_severity(severity, "Got HTTP #{response.code} POSTing to #{uri}")
-            log_at_severity(severity, response.body)
+            msg = "POST to #{uri} returned HTTP Code #{response.code} and Body: #{response.body}"
+            response.code.start_with?("5") ? Entitlements.logger.warn(msg) : Entitlements.logger.error(msg)
             return { code: response.code.to_i, data: { "body" => response.body } }
           end
 

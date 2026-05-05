@@ -379,8 +379,7 @@ describe Entitlements::Service::GitHub do
     it "logs at error and returns code and body for a non-200 4xx response" do
       answer = { "errors" => ["message" => "Something busted"] }
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 429, body: JSON.generate(answer))
-      expect(logger).to receive(:error).with("Got HTTP 429 POSTing to https://github.fake/api/v3/graphql")
-      expect(logger).to receive(:error).with("{\"errors\":[{\"message\":\"Something busted\"}]}")
+      expect(logger).to receive(:error).with("POST to https://github.fake/api/v3/graphql returned HTTP Code 429 and Body: #{JSON.generate(answer)}")
       response = subject.send(:graphql_http_post_real, "nonsense")
       expect(response).to eq(code: 429, data: { "body" => JSON.generate(answer) })
     end
@@ -388,8 +387,7 @@ describe Entitlements::Service::GitHub do
     it "logs at warn and returns code and body for a 5xx response (retryable)" do
       body = '{"message": "We couldn\'t respond to your request in time. Sorry about that."}'
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 504, body:)
-      expect(logger).to receive(:warn).with("Got HTTP 504 POSTing to https://github.fake/api/v3/graphql")
-      expect(logger).to receive(:warn).with(body)
+      expect(logger).to receive(:warn).with("POST to https://github.fake/api/v3/graphql returned HTTP Code 504 and Body: #{body}")
       response = subject.send(:graphql_http_post_real, "nonsense")
       expect(response).to eq(code: 504, data: { "body" => body })
     end
