@@ -418,8 +418,10 @@ module Entitlements
             end
             { code: response.code.to_i, data: }
           rescue JSON::ParserError => e
-            # Synthesized 500 below triggers a retry; log at WARN.
-            Entitlements.logger.warn "#{e.class} #{e.message}: #{response.body.inspect}"
+            # JSON parse errors mean the API returned something we can't interpret. The
+            # synthesized 500 below triggers a retry, but the cause is more likely a real
+            # protocol/server problem than a transient network blip, so log at ERROR.
+            Entitlements.logger.error "#{e.class} #{e.message}: #{response.body.inspect}"
             { code: 500, data: { "body" => response.body } }
           end
         rescue => e
