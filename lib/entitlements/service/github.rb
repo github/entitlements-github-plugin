@@ -338,15 +338,43 @@ module Entitlements
       def graphql_http_post(query)
         1.upto(MAX_GRAPHQL_RETRIES) do |try_number|
           result = graphql_http_post_real(query)
-          if result[:code] < 500
+          if !graphql_result_retryable?(result)
             return result
           elsif try_number >= MAX_GRAPHQL_RETRIES
-            Entitlements.logger.error "Query still failing after #{MAX_GRAPHQL_RETRIES} tries. Giving up."
+            Entitlements.logger.error "Query still failing after #{MAX_GRAPHQL_RETRIES} tries (last code: #{result[:code]}). Giving up."
             return result
           else
             Entitlements.logger.warn "GraphQL failed on try #{try_number} of #{MAX_GRAPHQL_RETRIES}. Will retry."
             sleep WAIT_BETWEEN_GRAPHQL_RETRIES * (2**(try_number - 1))
           end
+        end
+      end
+
+      # Helper: determine whether a result hash from `graphql_http_post_real` represents
+      # a transient failure that the retry wrapper will retry. Used by the wrapper itself
+      # and to decide log severity inside `graphql_http_post_real`.
+      #
+      # result - Hash returned by `graphql_http_post_real`.
+      #
+      # Returns true if the result is retryable (HTTP 5xx or synthetic 5xx), false otherwise.
+      Contract ({ code: Integer, data: C::Or[nil, Hash] }) => C::Bool
+      def graphql_result_retryable?(result)
+        result[:code] >= 500
+      end
+
+      # Helper: log `message` to `Entitlements.logger` at the given severity. Restricts
+      # the dispatch to a known set of severities so callers can pick a level computed
+      # at runtime without going through `send`/`public_send`.
+      #
+      # severity - Symbol, one of :warn or :error.
+      # message  - String message to log.
+      #
+      # Returns nothing.
+      Contract C::Or[:warn, :error], String => C::Any
+      def log_at_severity(severity, message)
+        case severity
+        when :warn then Entitlements.logger.warn(message)
+        when :error then Entitlements.logger.error(message)
         end
       end
 
@@ -370,23 +398,34 @@ module Entitlements
           response = http.request(request)
 
           if response.code != "200"
-            Entitlements.logger.error "Got HTTP #{response.code} POSTing to #{uri}"
-            Entitlements.logger.error response.body
+            # The retry wrapper retries on 5xx, so log those at WARN to avoid misleading
+            # the operator with an ERROR for a transient failure that we recover from.
+            # Terminal non-2xx responses (4xx) stay at ERROR.
+            severity = response.code.start_with?("5") ? :warn : :error
+            log_at_severity(severity, "Got HTTP #{response.code} POSTing to #{uri}")
+            log_at_severity(severity, response.body)
             return { code: response.code.to_i, data: { "body" => response.body } }
           end
 
           begin
             data = JSON.parse(response.body)
             if data.key?("errors")
-              Entitlements.logger.error "Errors reported: #{data['errors'].inspect}"
+              # Synthesized 500 below triggers a retry, so log at WARN. Note: some GraphQL
+              # `errors` are permanent (bad query, auth, schema). The retry wrapper's final
+              # "Giving up" ERROR will surface persistent cases.
+              Entitlements.logger.warn "Errors reported: #{data['errors'].inspect}"
               return { code: 500, data: }
             end
             { code: response.code.to_i, data: }
           rescue JSON::ParserError => e
-            Entitlements.logger.error "#{e.class} #{e.message}: #{response.body.inspect}"
+            # Synthesized 500 below triggers a retry; log at WARN.
+            Entitlements.logger.warn "#{e.class} #{e.message}: #{response.body.inspect}"
             { code: 500, data: { "body" => response.body } }
           end
         rescue => e
+          # Catch-all for any unexpected exception (network blip OR local code bug).
+          # We retry below via the synthesized 500, but log at ERROR because this
+          # branch can mask programming errors that operators must see.
           Entitlements.logger.error "Caught #{e.class} POSTing to #{uri}: #{e.message}"
           { code: 500, data: nil }
         end

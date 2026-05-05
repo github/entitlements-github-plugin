@@ -352,7 +352,7 @@ describe Entitlements::Service::GitHub do
       expect_any_instance_of(Object).to receive(:sleep).with(2).exactly(1).times
       expect(logger).to receive(:warn).with("GraphQL failed on try 1 of 3. Will retry.")
       expect(logger).to receive(:warn).with("GraphQL failed on try 2 of 3. Will retry.")
-      expect(logger).to receive(:error).with("Query still failing after 3 tries. Giving up.")
+      expect(logger).to receive(:error).with("Query still failing after 3 tries (last code: 502). Giving up.")
 
       response = subject.send(:graphql_http_post, query)
       expect(response[:code]).to eq(502)
@@ -368,7 +368,7 @@ describe Entitlements::Service::GitHub do
       expect(response).to eq(code: 200, data: answer)
     end
 
-    it "logs and returns code=500 and exception message for an unhandled exception" do
+    it "logs at error and returns code=500 and exception message for an unhandled exception" do
       exc = StandardError.new("Oh no you don't")
       stub_request(:post, "https://github.fake/api/v3/graphql").to_raise(exc)
       expect(logger).to receive(:error).with("Caught StandardError POSTing to https://github.fake/api/v3/graphql: Oh no you don't")
@@ -376,7 +376,7 @@ describe Entitlements::Service::GitHub do
       expect(response).to eq(code: 500, data: nil)
     end
 
-    it "logs and returns code and body for non-200 response" do
+    it "logs at error and returns code and body for a non-200 4xx response" do
       answer = { "errors" => ["message" => "Something busted"] }
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 429, body: JSON.generate(answer))
       expect(logger).to receive(:error).with("Got HTTP 429 POSTing to https://github.fake/api/v3/graphql")
@@ -385,18 +385,27 @@ describe Entitlements::Service::GitHub do
       expect(response).to eq(code: 429, data: { "body" => JSON.generate(answer) })
     end
 
-    it "logs and returns raw text for JSON parsing error" do
+    it "logs at warn and returns code and body for a 5xx response (retryable)" do
+      body = '{"message": "We couldn\'t respond to your request in time. Sorry about that."}'
+      stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 504, body:)
+      expect(logger).to receive(:warn).with("Got HTTP 504 POSTing to https://github.fake/api/v3/graphql")
+      expect(logger).to receive(:warn).with(body)
+      response = subject.send(:graphql_http_post_real, "nonsense")
+      expect(response).to eq(code: 504, data: { "body" => body })
+    end
+
+    it "logs at warn and returns raw text for JSON parsing error" do
       answer = "mor chicken mor rewardz!"
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: answer)
-      expect(logger).to receive(:error).with("JSON::ParserError unexpected character: 'mor' at line 1 column 1: \"mor chicken mor rewardz!\"")
+      expect(logger).to receive(:warn).with("JSON::ParserError unexpected character: 'mor' at line 1 column 1: \"mor chicken mor rewardz!\"")
       response = subject.send(:graphql_http_post_real, "nonsense")
       expect(response).to eq(code: 500, data: { "body" => "mor chicken mor rewardz!" })
     end
 
-    it "logs and returns when errors are reported in a 200" do
+    it "logs at warn and returns when errors are reported in a 200" do
       answer = { "errors" => ["ENOTENOUGHCHICKEn"] }
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: JSON.generate(answer))
-      expect(logger).to receive(:error).with("Errors reported: [\"ENOTENOUGHCHICKEn\"]")
+      expect(logger).to receive(:warn).with("Errors reported: [\"ENOTENOUGHCHICKEn\"]")
       response = subject.send(:graphql_http_post_real, "nonsense")
       expect(response).to eq(code: 500, data: answer)
     end
