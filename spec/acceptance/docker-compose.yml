@@ -31,7 +31,7 @@ services:
 
   ldap-server:
     entrypoint: /acceptance/ldap-server/run-server.sh
-    image: osixia/openldap:2.6.10-alpha
+    image: osixia/openldap:1.5.0
     networks:
       ldap-network:
         aliases:
