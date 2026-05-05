@@ -37,19 +37,28 @@ cp /acceptance/ca/intermediate/certs/ca-chain.cert.pem /container/service/slapd/
 cp /acceptance/ldap-server/tls/dhparam.pem /container/service/slapd/assets/certs/dhparam.pem
 chown -R root:root /container/service/slapd/assets/certs
 
-# Pre-install our configuration environment
-rm -f /container/environment/99-default/*.yaml
-cp /acceptance/ldap-server/env/*.yaml /container/environment/99-default
+# Pre-install our configuration environment.
+# Drop our overrides into a lexically earlier directory than the image's stock
+# /container/environment/99-default. osixia's run tool walks /container/environment
+# in sorted order and first-set-wins (see /container/tool/run), so values declared
+# here take precedence while everything we *don't* override (LDAP_PORT, LDAPS_PORT,
+# LDAP_NOFILE, DISABLE_CHOWN, etc.) is inherited from the image defaults.
+mkdir -p /container/environment/01-custom
+cp /acceptance/ldap-server/env/*.yaml /container/environment/01-custom/
 
 # Pre-install our schema (after killing most of the defaults from the container)
 rm -f /container/service/slapd/assets/config/bootstrap/ldif/0[345]*.ldif
 rm -rf /container/service/slapd/assets/config/bootstrap/schema/mmc
-rm -f /etc/ldap/schema/*
+# Only remove stock *.ldif schemas; keep *.schema files because osixia/openldap:1.5.0's
+# bootstrap (slaptest) converts *.schema -> cn=config and needs core.schema to exist.
+rm -f /etc/ldap/schema/*.ldif
 cp /acceptance/ldap-server/schema/* /etc/ldap/schema/
 cp /acceptance/ldap-server/ldif/bootstrap/*.ldif /container/service/slapd/assets/config/bootstrap/ldif
 
 # Launch openldap
-nohup /usr/bin/python -u /container/tool/run -l info &
+# /container/tool/run has its own `#!/usr/bin/python3 -u` shebang in osixia/openldap:1.5.0,
+# which no longer ships /usr/bin/python. Invoke it directly so we don't depend on Py2 paths.
+nohup /container/tool/run -l info &
 OPENLDAP_PID=$!
 
 # Wait for the process to be running and connectable
