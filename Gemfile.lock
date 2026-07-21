@@ -81,7 +81,7 @@ GEM
     prism (1.9.0)
     public_suffix (6.0.2)
     racc (1.8.1)
-    rack (3.1.20)
+    rack (3.1.21)
     rainbow (3.1.1)
     rake (13.4.2)
     rbs (3.6.1)
