@@ -1,4 +1,6 @@
 ---
+# source: github/sae-common-workflows/action-ln/sae-iam/dependabot/dependabot.yml
+# It's fine to have dependabot consider more languages than used in the repo.
 version: 2
 
 registries:
@@ -12,52 +14,44 @@ registries:
     url: "rubygems.pkg.github.com/github"
     token: "${{secrets.CONTAINER_BUILDER_TOKEN}}"
 
+# Group all updates into a single PR
+multi-ecosystem-groups:
+  all:
+    schedule:
+      interval: "monthly"
+
 updates:
   - package-ecosystem: "bundler"
+    multi-ecosystem-group: "all"
     vendor: true
     directory: "/"
     registries: ["rubygems-github-packages"]
-    groups:
-      ruby-gems-production:
-        dependency-type: "production"
-        patterns: ["*"]
-      dev-ruby-development:
-        dependency-type: "development"
-        patterns: ["*"]
-    schedule:
-      interval: "weekly"
+    patterns: ["*"]
 
   - package-ecosystem: "docker"
+    multi-ecosystem-group: "all"
     directory: "/"
     registries: ["ghcr"]
-    groups:
-      container-images:
-        patterns: ["*"]
-    schedule:
-      interval: "weekly"
+    patterns: ["*"]
 
   - package-ecosystem: "github-actions"
+    multi-ecosystem-group: "all"
     directory: "/"
-    groups:
-      github-actions:
-        patterns: ["*"]
+    patterns: ["*"]
     ignore:
       - dependency-name: "github/internal-actions"
-    schedule:
-      interval: "weekly"
 
   - package-ecosystem: "pip"
+    multi-ecosystem-group: "all"
     directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      python-packages:
-        patterns: ["*"]
+    patterns: ["*"]
 
   - package-ecosystem: "gomod"
+    multi-ecosystem-group: "all"
     directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      go-packages:
-        patterns: ["*"]
+    patterns: ["*"]
+
+  - package-ecosystem: npm
+    multi-ecosystem-group: "all"
+    directory: "/"
+    patterns: ["*"]
