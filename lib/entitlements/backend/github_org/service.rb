@@ -54,6 +54,9 @@ module Entitlements
 
             Entitlements.logger.warn "User #{user} not found in GitHub instance #{identifier}, ignoring."
             return false
+          rescue Octokit::UnprocessableEntity => e
+            Entitlements.logger.warn "Unprocessable entity when adding #{user} to organization #{org} with role #{role}: #{e.message}. This likely means the user blocked the invite, so we're ignoring them, but someone should check it."
+            return false
           end
 
           # Happy path
