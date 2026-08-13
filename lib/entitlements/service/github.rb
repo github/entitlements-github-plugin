@@ -52,6 +52,7 @@ module Entitlements
         # need to be obtained only one time per organization, but might be used multiple times.
         Entitlements.cache[:github_pending_members] ||= {}
         Entitlements.cache[:github_org_members] ||= {}
+        Entitlements.cache[:github_enterprise] ||= {}
       end
 
       # Return the identifier, either the address specified or otherwise "github.com".
@@ -97,13 +98,23 @@ module Entitlements
       end
 
       # Returns true if the github instance is an enterprise server instance
+      #
+      # Whether an instance is GHES is a property of the instance and not of any one organization,
+      # so this is cached against the address rather than the org signature. Without this the meta
+      # endpoint is queried once per organization, which is a request per org for an answer that
+      # cannot vary between them. Note this caches false as well as true, so it checks for the key
+      # rather than using ||=, since github.com correctly answers false here.
       Contract C::None => C::Bool
       def enterprise?
+        instance_signature = addr || ""
+        cache = Entitlements.cache[:github_enterprise]
+        return cache[instance_signature] if cache.key?(instance_signature)
+
         meta = Retryable.with_context(:default) do
           octokit.github_meta
         end
 
-        meta.key? :installed_version
+        cache[instance_signature] = meta.key?(:installed_version)
       end
 
       # Read the members of an organization who are in a "pending" role. These users should

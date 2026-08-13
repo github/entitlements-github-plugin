@@ -70,6 +70,28 @@ describe Entitlements::Service::GitHub do
                   })
       expect(subject.enterprise?).to eq(true)
     end
+
+    it "queries the API only once per instance across multiple organizations" do
+      stub = stub_request(:get, "https://github.fake/api/v3/meta").
+        to_return({
+                    body: JSON.dump({ verifiable_password_authentication: true }),
+                    headers: {
+                      content_type: "application/json; charset=utf-8"
+                    }
+                  })
+
+      other_org = described_class.new(
+        addr: "https://github.fake/api/v3",
+        org: "puppiesinc",
+        token: "GoPackGo",
+        ou: "ou=puppiesinc,ou=GitHub,dc=github,dc=fake",
+        ignore_not_found: false
+      )
+
+      expect(subject.enterprise?).to eq(false)
+      expect(other_org.enterprise?).to eq(false)
+      expect(stub).to have_been_requested.once
+    end
   end
 
   describe "#pending_members" do
