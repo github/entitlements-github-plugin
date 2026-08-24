@@ -13,6 +13,8 @@ module Entitlements
         include ::Contracts::Core
         C = ::Contracts
 
+        # group_name - Name of the corresponding group in the entitlements configuration file.
+        # config     - Optionally, a Hash of configuration information (configuration is referenced if empty).
         Contract String, C::Maybe[C::HashOf[String => C::Any]] => C::Any
         def initialize(group_name, config = nil)
           super

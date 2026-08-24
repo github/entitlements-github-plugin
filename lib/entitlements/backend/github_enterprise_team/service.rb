@@ -20,10 +20,11 @@ module Entitlements
         PER_PAGE = 100
 
         class APIError < RuntimeError
-          attr_reader :status
+          attr_reader :body, :status
 
           def initialize(status, body)
             @status = status
+            @body = body
             super("GitHub enterprise team API returned HTTP #{status}: #{body}")
           end
         end
@@ -98,7 +99,7 @@ module Entitlements
 
           members
         rescue APIError => e
-          raise TeamNotFound.new(e.status, e.message) if e.status == 404
+          raise TeamNotFound.new(e.status, e.body) if e.status == 404
 
           raise
         end
@@ -131,7 +132,13 @@ module Entitlements
           end
 
           response = Retryable.with_context(:default) do
-            Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(request) }
+            result = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
+              http.request(request)
+            end
+            status = result.code.to_i
+            raise APIError.new(status, result.body) if status == 429 || status >= 500
+
+            result
           end
           raise APIError.new(response.code.to_i, response.body) unless response.is_a?(Net::HTTPSuccess)
 

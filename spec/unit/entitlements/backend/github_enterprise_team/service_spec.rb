@@ -76,7 +76,11 @@ describe Entitlements::Backend::GitHubEnterpriseTeam::Service do
       stub_request(:get, members_url).to_return(status: 404, body: '{"message":"Not Found"}')
 
       expect { subject.read_team(group) }
-        .to raise_error(described_class::TeamNotFound, /HTTP 404/)
+        .to raise_error(
+          described_class::TeamNotFound,
+          'GitHub enterprise team API returned HTTP 404: {"message":"Not Found"}'
+        )
+      expect(WebMock).to have_requested(:get, members_url).once
     end
 
     it "propagates other API failures" do
@@ -84,6 +88,30 @@ describe Entitlements::Backend::GitHubEnterpriseTeam::Service do
 
       expect { subject.read_team(group) }
         .to raise_error(described_class::APIError, /HTTP 403/)
+    end
+
+    it "retries transient API failures" do
+      allow_any_instance_of(Object).to receive(:sleep)
+      stub_request(:get, members_url)
+        .to_return(
+          { status: 500, body: '{"message":"Server Error"}' },
+          { status: 200, body: JSON.generate([{ "login" => "OctoCat" }]) }
+        )
+
+      expect(subject.read_team(group).member_strings).to eq(Set.new(["octocat"]))
+      expect(WebMock).to have_requested(:get, members_url).twice
+    end
+
+    it "retries rate limit responses" do
+      allow_any_instance_of(Object).to receive(:sleep)
+      stub_request(:get, members_url)
+        .to_return(
+          { status: 429, body: '{"message":"Too Many Requests"}' },
+          { status: 200, body: JSON.generate([{ "login" => "OctoCat" }]) }
+        )
+
+      expect(subject.read_team(group).member_strings).to eq(Set.new(["octocat"]))
+      expect(WebMock).to have_requested(:get, members_url).twice
     end
   end
 
