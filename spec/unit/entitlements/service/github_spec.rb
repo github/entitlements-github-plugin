@@ -361,6 +361,52 @@ describe Entitlements::Service::GitHub do
   end
 
   describe "#graphql_http_post_real" do
+    it "reuses a started HTTP connection across requests" do
+      answer = { "foo" => "bar" }
+      response = instance_double(Net::HTTPOK, code: "200", body: JSON.generate(answer))
+      http = Net::HTTP.new("github.fake", 443)
+
+      expect(Net::HTTP).to receive(:new).with("github.fake", 443).once.and_return(http)
+      expect(http).to receive(:use_ssl=).with(true).once
+      expect(http).to receive(:start).once
+      expect(http).to receive(:request).twice.and_return(response)
+
+      2.times do
+        expect(subject.send(:graphql_http_post_real, "nonsense")).to eq(code: 200, data: answer)
+      end
+    end
+
+    it "discards a failed connection so the next request reconnects" do
+      answer = { "foo" => "bar" }
+      response = instance_double(Net::HTTPOK, code: "200", body: JSON.generate(answer))
+      failed_http = Net::HTTP.new("github.fake", 443)
+      replacement_http = Net::HTTP.new("github.fake", 443)
+
+      expect(Net::HTTP).to receive(:new).with("github.fake", 443).twice.and_return(failed_http, replacement_http)
+      expect(failed_http).to receive(:use_ssl=).with(true)
+      expect(failed_http).to receive(:start)
+      expect(failed_http).to receive(:request).and_raise(EOFError, "closed connection")
+      expect(failed_http).to receive(:started?).and_return(true)
+      expect(failed_http).to receive(:finish)
+      expect(replacement_http).to receive(:use_ssl=).with(true)
+      expect(replacement_http).to receive(:start)
+      expect(replacement_http).to receive(:request).and_return(response)
+      expect(logger).to receive(:error).
+        with("Caught EOFError POSTing to https://github.fake/api/v3/graphql: closed connection")
+
+      expect(subject.send(:graphql_http_post_real, "nonsense")).to eq(code: 500, data: nil)
+      expect(subject.send(:graphql_http_post_real, "nonsense")).to eq(code: 200, data: answer)
+    end
+
+    it "logs a warning if a failed connection cannot be closed" do
+      http = instance_double(Net::HTTP, started?: true)
+      subject.instance_variable_set(:@graphql_http, http)
+
+      expect(http).to receive(:finish).and_raise(IOError, "already closed")
+      expect(logger).to receive(:warn).with("Failed to close GraphQL connection: already closed")
+      expect(subject.send(:reset_graphql_http)).to be_nil
+    end
+
     it "returns code=200 and parsed JSON for a successful response" do
       answer = { "foo" => ["bar", "baz" => "fizz"] }
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: JSON.generate(answer))

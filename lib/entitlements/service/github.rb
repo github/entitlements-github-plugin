@@ -369,9 +369,7 @@ module Entitlements
       # Returns { code: <Integer>, data: <response data structure> }
       Contract String => { code: Integer, data: C::Or[nil, Hash] }
       def graphql_http_post_real(query)
-        uri = URI.parse(File.join(octokit.api_endpoint, "graphql"))
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = uri.scheme == "https"
+        uri = graphql_uri
 
         request = Net::HTTP::Post.new(uri)
         request.add_field("Authorization", "bearer #{token}")
@@ -379,7 +377,7 @@ module Entitlements
         request.body = JSON.generate("query" => query)
 
         begin
-          response = http.request(request)
+          response = graphql_http.request(request)
 
           if response.code != "200"
             # The retry wrapper retries on 5xx, so log those at WARN to avoid misleading
@@ -411,9 +409,39 @@ module Entitlements
           # Catch-all for any unexpected exception (network blip OR local code bug).
           # We retry below via the synthesized 500, but log at ERROR because this
           # branch can mask programming errors that operators must see.
+          reset_graphql_http
           Entitlements.logger.error "Caught #{e.class} POSTing to #{uri}: #{e.message}"
           { code: 500, data: nil }
         end
+      end
+
+      # Return the URI used for GraphQL requests.
+      Contract C::None => URI::Generic
+      def graphql_uri
+        @graphql_uri ||= URI.parse(File.join(octokit.api_endpoint, "graphql"))
+      end
+
+      # Return a started HTTP connection that can be reused across GraphQL requests.
+      Contract C::None => Net::HTTP
+      def graphql_http
+        @graphql_http ||= begin
+          uri = graphql_uri
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = uri.scheme == "https"
+          http.start
+          http
+        end
+      end
+
+      # Discard a failed GraphQL connection so the retry wrapper creates a new one.
+      Contract C::None => nil
+      def reset_graphql_http
+        http, @graphql_http = @graphql_http, nil
+        http.finish if http&.started?
+        nil
+      rescue IOError, SystemCallError => e
+        Entitlements.logger.warn "Failed to close GraphQL connection: #{e.message}"
+        nil
       end
 
       # Create a unique signature for this GitHub instance to identify it in a global cache.
