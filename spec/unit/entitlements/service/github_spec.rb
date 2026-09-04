@@ -312,6 +312,33 @@ describe Entitlements::Service::GitHub do
     let(:answer) { { "foo" => "bar" } }
     let(:query) { "my query here" }
 
+    it "reconnects and retries after the connection times out" do
+      response = instance_double(Net::HTTPOK, code: "200", body: JSON.generate(answer))
+      timed_out_http = Net::HTTP.new("github.fake", 443)
+      replacement_http = Net::HTTP.new("github.fake", 443)
+
+      expect(Net::HTTP).to receive(:new).
+        with("github.fake", 443).
+        twice.
+        and_return(timed_out_http, replacement_http)
+      expect(timed_out_http).to receive(:use_ssl=).with(true)
+      expect(timed_out_http).to receive(:start)
+      expect(timed_out_http).to receive(:request).
+        and_raise(Net::ReadTimeout, "execution expired")
+      expect(timed_out_http).to receive(:started?).and_return(true)
+      expect(timed_out_http).to receive(:finish)
+      expect(replacement_http).to receive(:use_ssl=).with(true)
+      expect(replacement_http).to receive(:start)
+      expect(replacement_http).to receive(:request).and_return(response)
+      expect_any_instance_of(Object).to receive(:sleep).with(1).once
+      expect(logger).to receive(:error).
+        with("Caught Net::ReadTimeout POSTing to https://github.fake/api/v3/graphql: Net::ReadTimeout with \"execution expired\"")
+      expect(logger).to receive(:warn).
+        with("GraphQL failed on try 1 of 3. Will retry.")
+
+      expect(subject.send(:graphql_http_post, query)).to eq(code: 200, data: answer)
+    end
+
     it "returns immediately for success" do
       expect(subject).to receive(:graphql_http_post_real).with(query).and_return(code: 200, data: answer)
       expect_any_instance_of(Object).not_to receive(:sleep)
