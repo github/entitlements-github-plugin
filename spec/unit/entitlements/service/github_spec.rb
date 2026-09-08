@@ -47,6 +47,71 @@ describe Entitlements::Service::GitHub do
     end
   end
 
+  describe "#org_member?" do
+    let(:members_and_roles) do
+      {
+        "alice" => "MEMBER",
+        "bob"   => "ADMIN"
+      }
+    end
+
+    before do
+      allow(subject).to receive(:members_and_roles_from_rest).and_return(members_and_roles)
+    end
+
+    it "performs case-insensitive lookups" do
+      expect(subject.org_member?("ALIce")).to eq(true)
+      expect(subject.org_member?("charles")).to eq(false)
+    end
+
+    it "reuses the normalized membership set" do
+      expect(subject.org_member?("alice")).to eq(true)
+      normalized_members = Entitlements.cache[:github_org_members]["https://github.fake/api/v3|kittensinc"][:normalized_members]
+      expect(subject.org_member?("bob")).to eq(true)
+      expect(Entitlements.cache[:github_org_members]["https://github.fake/api/v3|kittensinc"][:normalized_members]).to equal(normalized_members)
+    end
+
+    it "shares the normalized membership set between services for the same organization signature" do
+      other = described_class.new(
+        addr: "https://github.fake/api/v3",
+        org: "kittensinc",
+        token: "DifferentToken",
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        ignore_not_found: false
+      )
+
+      expect(subject.org_member?("alice")).to eq(true)
+      normalized_members = Entitlements.cache[:github_org_members]["https://github.fake/api/v3|kittensinc"][:normalized_members]
+      expect(other.org_member?("bob")).to eq(true)
+      expect(Entitlements.cache[:github_org_members]["https://github.fake/api/v3|kittensinc"][:normalized_members]).to equal(normalized_members)
+    end
+
+    it "isolates normalized membership sets by organization and GitHub instance" do
+      other_org = described_class.new(
+        addr: "https://github.fake/api/v3",
+        org: "puppiesinc",
+        token: "GoPackGo",
+        ou: "ou=puppiesinc,ou=GitHub,dc=github,dc=fake",
+        ignore_not_found: false
+      )
+      other_instance = described_class.new(
+        addr: "https://github.example/api/v3",
+        org: "kittensinc",
+        token: "GoPackGo",
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=example",
+        ignore_not_found: false
+      )
+      allow(other_org).to receive(:members_and_roles_from_rest).and_return("charles" => "MEMBER")
+      allow(other_instance).to receive(:members_and_roles_from_rest).and_return("david" => "MEMBER")
+
+      expect(subject.org_member?("alice")).to eq(true)
+      expect(other_org.org_member?("alice")).to eq(false)
+      expect(other_org.org_member?("charles")).to eq(true)
+      expect(other_instance.org_member?("alice")).to eq(false)
+      expect(other_instance.org_member?("david")).to eq(true)
+    end
+  end
+
   describe "#enterprise?" do
     it "returns false if an instance is not enterprise" do
       stub_request(:get, "https://github.fake/api/v3/meta").
@@ -122,6 +187,8 @@ describe Entitlements::Service::GitHub do
 
       # First load should read from the cache.
       expect(subject.org_members).to eq(answer.map { |k, v| [k, v.downcase] }.to_h)
+      expect(subject.org_member?("monalisa")).to eq(true)
+      normalized_members = Entitlements.cache[:github_org_members]["https://github.fake/api/v3|kittensinc"][:normalized_members]
 
       # Invalidating cache should force a re-read.
       answer_2 = answer.dup
@@ -137,6 +204,8 @@ describe Entitlements::Service::GitHub do
       # Check that the re-read has occurred and the correct result is achieved.
       expect(subject).not_to receive(:members_and_roles_from_graphql) # Should already be in object's cache
       expect(subject.org_members).to eq(answer_2.map { |k, v| [k, v.downcase] }.to_h)
+      expect(subject.org_member?("ragamuffin")).to eq(true)
+      expect(Entitlements.cache[:github_org_members]["https://github.fake/api/v3|kittensinc"][:normalized_members]).not_to equal(normalized_members)
     end
   end
 

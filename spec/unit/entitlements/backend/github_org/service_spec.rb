@@ -129,6 +129,39 @@ describe Entitlements::Backend::GitHubOrg::Service do
         expect(subject.pending_members).to eq(Set.new)
         expect(subject.org_members).to eq("bob" => "admin")
       end
+
+      it "adds active members and role changes to a materialized normalized lookup" do
+        allow(subject).to receive(:members_and_roles_from_rest).and_return("bob" => "MEMBER")
+        expect(subject.org_member?("bob")).to eq(true)
+
+        stub_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/alice").to_return(
+          status: 200,
+          headers: {
+            "Content-type" => "application/json"
+          },
+          body: JSON.generate(
+            "url"   => "https://github.fake/api/v3/orgs/kittensinc/memberships/alice",
+            "state" => "active",
+            "role"  => "admin"
+          )
+        )
+        stub_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
+          status: 200,
+          headers: {
+            "Content-type" => "application/json"
+          },
+          body: JSON.generate(
+            "url"   => "https://github.fake/api/v3/orgs/kittensinc/memberships/bob",
+            "state" => "active",
+            "role"  => "admin"
+          )
+        )
+
+        expect(subject.send(:add_user_to_organization, "alice", "admin")).to eq(true)
+        expect(subject.org_member?("alice")).to eq(true)
+        expect(subject.send(:add_user_to_organization, "bob", "admin")).to eq(true)
+        expect(subject.org_member?("bob")).to eq(true)
+      end
     end
 
     context "sad path" do
@@ -243,6 +276,18 @@ describe Entitlements::Backend::GitHubOrg::Service do
       expect(result).to eq(true)
       expect(subject.pending_members).to eq(Set.new)
       expect(subject.org_members).to eq({})
+    end
+
+    it "removes members from a materialized normalized lookup" do
+      allow(subject).to receive(:members_and_roles_from_rest).and_return("bob" => "ADMIN")
+      allow(subject).to receive(:enterprise?).and_return(false)
+      allow(subject).to receive(:pending_members_from_graphql).and_return(Set.new)
+      expect(subject.org_member?("bob")).to eq(true)
+
+      stub_request(:delete, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(status: 204)
+
+      expect(subject.send(:remove_user_from_organization, "bob")).to eq(true)
+      expect(subject.org_member?("bob")).to eq(false)
     end
   end
 end
