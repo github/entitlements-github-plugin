@@ -2,7 +2,7 @@
 
 [![acceptance](https://github.com/github/entitlements-github-plugin/actions/workflows/acceptance.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/acceptance.yml) [![test](https://github.com/github/entitlements-github-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/test.yml) [![lint](https://github.com/github/entitlements-github-plugin/actions/workflows/lint.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/lint.yml) [![release](https://github.com/github/entitlements-github-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/release.yml) [![build](https://github.com/github/entitlements-github-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/build.yml) [![coverage](https://img.shields.io/badge/coverage-100%25-success)](https://img.shields.io/badge/coverage-100%25-success) [![style](https://img.shields.io/badge/code%20style-rubocop--github-blue)](https://github.com/github/rubocop-github)
 
-`entitlements-github-plugin` is an [entitlements-app](https://github.com/github/entitlements-app) plugin allowing entitlements configs to be used to manage membership of GitHub.com Organizations and Teams.
+`entitlements-github-plugin` is an [entitlements-app](https://github.com/github/entitlements-app) plugin allowing entitlements configs to be used to manage membership of GitHub.com organizations, organization teams, and enterprise teams.
 
 ## Usage
 
@@ -36,6 +36,7 @@ require "bundler/setup"
 require "entitlements"
 
 # require entitlements plugins here
+require "entitlements/backend/github_enterprise_team"
 require "entitlements/backend/github_org"
 require "entitlements/backend/github_team"
 require "entitlements/service/github"
@@ -84,6 +85,21 @@ For example, if there were a file `github.com/github/teams/new-team.txt` with a 
 Entitlements configs can contain metadata which the plugin will use to make further configuration decisions.
 
 `metadata_parent_team_name` - when defined in an entitlements config, the defined team will be made the parent team of this GitHub.com Team.
+
+### GitHub Enterprise Teams
+
+`entitlements-github-plugin` manages membership of existing GitHub Enterprise Cloud teams. Enterprise teams must be created separately; this backend only synchronizes their members.
+
+```ruby
+  github.com/enterprises/acme/teams:
+    base: ou=teams,ou=acme,ou=GitHub,dc=github,dc=com
+    dir: github.com/enterprises/acme/teams
+    enterprise: acme
+    token: <%= ENV["GITHUB_ENTERPRISE_TOKEN"] %>
+    type: "github_enterprise_team"
+```
+
+The token must be a classic personal access token with `read:enterprise` and `admin:enterprise` scopes. GitHub App and fine-grained personal access tokens are not supported by the enterprise team membership API.
 
 ## Release 🚀
 
