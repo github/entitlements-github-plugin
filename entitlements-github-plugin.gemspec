@@ -18,6 +18,7 @@ Gem::Specification.new do |s|
 
   s.add_dependency "contracts", "~> 0.17.0"
   s.add_dependency "faraday", "~> 2.0"
+  s.add_dependency "faraday-net_http_persistent", "~> 2.3"
   s.add_dependency "faraday-retry", "~> 2.0"
   s.add_dependency "octokit", "~> 4.25"
   s.add_dependency "retryable", "~> 3.0", ">= 3.0.5"
