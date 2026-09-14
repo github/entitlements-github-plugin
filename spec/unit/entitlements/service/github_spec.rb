@@ -29,6 +29,15 @@ describe Entitlements::Service::GitHub do
     end
   end
 
+  describe "#octokit" do
+    it "uses persistent HTTP connections" do
+      client = subject.send(:octokit)
+
+      expect(client.middleware.adapter.klass).to eq(Faraday::Adapter::NetHttpPersistent)
+      expect(subject.send(:octokit)).to equal(client)
+    end
+  end
+
   describe "#org_members" do
     let(:members_and_roles) do
       {

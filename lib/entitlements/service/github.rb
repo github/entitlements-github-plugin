@@ -2,6 +2,7 @@
 
 require_relative "../config/retry"
 
+require "faraday/net_http_persistent"
 require "net/http"
 require "octokit"
 require "uri"
@@ -169,6 +170,9 @@ module Entitlements
       def octokit
         @octokit ||= begin
           client = Octokit::Client.new(access_token: token)
+          middleware = Octokit::Default.middleware.dup
+          middleware.adapter :net_http_persistent
+          client.middleware = middleware
           client.api_endpoint = addr if addr
           client.auto_paginate = true
           client.per_page = 100

@@ -34,7 +34,7 @@ describe Entitlements::Backend::GitHubOrg::Provider do
 
     it "pulls the role name from the distinguished name" do
       allow(subject).to receive(:github).and_return(github)
-      allow(github).to receive(:org_members).and_return(members_and_roles)
+      expect(github).to receive(:org_members).once.and_return(members_and_roles)
       result = subject.read("member")
       expect(result).to be_a_kind_of(Entitlements::Models::Group)
       expect(result.member_strings).to eq(member_strings_set)
