@@ -140,8 +140,14 @@ module Entitlements
           end
         end
 
+        # Pre-fetch the current state of the organization from the API. Both of these are memoized
+        # by the provider, so calling them here means `calculate` reuses the result instead of
+        # making the request itself. Entitlements runs `prefetch` for every group through a thread
+        # pool sized by `max_parallelism`, whereas `calculate` runs serially, so fetching here lets
+        # these requests overlap across organizations.
         def prefetch
           existing_groups
+          provider.pending_members
         end
 
         private
