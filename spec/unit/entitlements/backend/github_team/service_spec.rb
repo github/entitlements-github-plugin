@@ -80,7 +80,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       graphql_response = '{"data":{"organization":{"team":null}}}'
       stub_request(:post, "https://github.fake/api/v3/graphql")
         .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"team-does-not-exist\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"team-does-not-exist\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\n}\\npageInfo {\\nendCursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response)
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -93,7 +93,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object when the team exists" do
       stub_request(:post, "https://github.fake/api/v3/graphql")
         .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\n}\\npageInfo {\\nendCursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -110,7 +110,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists" do
       stub_request(:post, "https://github.fake/api/v3/graphql")
         .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\n}\\npageInfo {\\nendCursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100, parent_team: "parent-cats"))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -129,7 +129,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists but has empty entitlement metadata" do
       stub_request(:post, "https://github.fake/api/v3/graphql")
         .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
+          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\n}\\npageInfo {\\nendCursor\\n}\\n}\\n}\\n}\\n}\"}"
         ).to_return(status: 200, body: graphql_response(cuddly_kittens_no_metadata, 0, 100, parent_team: "parent-cats"))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
@@ -718,7 +718,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "parses team data from a single page of results" do
         stub_request(:post, "https://github.fake/api/v3/graphql")
           .with(
-            body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}",
+            body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\n}\\npageInfo {\\nendCursor\\n}\\n}\\n}\\n}\\n}\"}",
             headers: {
               "Authorization" => "bearer GoPackGo",
               "Content-Type" => "application/json"
