@@ -5,6 +5,7 @@ require_relative "../config/retry"
 require "faraday/net_http_persistent"
 require "net/http"
 require "octokit"
+require "set"
 require "uri"
 
 module Entitlements
@@ -97,6 +98,20 @@ module Entitlements
         Entitlements.cache[:github_org_members][org_signature][:value]
       end
 
+      # Determine whether a username is an active member of the organization.
+      #
+      # username - GitHub username to look up.
+      #
+      # Returns true if the username is an active organization member.
+      Contract String => C::Bool
+      def org_member?(username)
+        org_members
+        entry = Entitlements.cache[:github_org_members].fetch(org_signature)
+        entry[:normalized_members] ||= Set.new(entry[:value].keys)
+        normalized_username = /[A-Z]/.match?(username) ? username.downcase : username
+        entry[:normalized_members].include?(normalized_username)
+      end
+
       # Returns true if the github instance is an enterprise server instance
       Contract C::None => C::Bool
       def enterprise?
@@ -160,6 +175,24 @@ module Entitlements
       end
 
       private
+
+      # Keep an already-materialized membership lookup synchronized after an addition or
+      # role change without forcing it to be built.
+      Contract String => nil
+      def add_org_member_to_normalized_lookup(username)
+        entry = Entitlements.cache[:github_org_members][org_signature]
+        entry[:normalized_members].add(username.downcase) if entry&.key?(:normalized_members)
+        nil
+      end
+
+      # Keep an already-materialized membership lookup synchronized after a removal without
+      # forcing it to be built.
+      Contract String => nil
+      def remove_org_member_from_normalized_lookup(username)
+        entry = Entitlements.cache[:github_org_members][org_signature]
+        entry[:normalized_members].delete(username.downcase) if entry&.key?(:normalized_members)
+        nil
+      end
 
       # The octokit object is initialized the first time it's called.
       #
