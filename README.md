@@ -167,6 +167,8 @@ Install the App on every managed repository with:
 
 These REST requirements are listed in [GitHub's App permission reference](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps). Repository reads require access to `collaborators(affiliation: DIRECT)`, `permissionSources`, and each direct source's `roleName`; see the [GraphQL schema](https://docs.github.com/en/graphql/reference/repos). **Live installation-token access to these fields has not been validated by the unit suite.** Before deploying, verify it using the actual App installation and GitHub/GHES version. If those fields are unavailable, do not enable mutations or substitute effective REST permissions.
 
+A live GitHub.com probe with a classic OAuth token confirmed that `permissionSources` and `roleName` require the `admin:org` scope; `repo` plus `read:org` was rejected. This is a classic-token scope requirement, not evidence that an App installation token has access. Validate the App separately rather than broadening an operator's token automatically.
+
 In a designated disposable repository, give an active organization member a direct role and a different, higher inherited role. Verify the direct source reports the lower role, then add/change/remove the direct grant using the installation token. Expect `204` for organization-member adds, updates, and removals. `201` indicates an invitation rather than active access; the backend warns and does not cache it as a completed grant. Confirm inherited and outside access remain unchanged and a subsequent run has no diff. Do not run this check against production accounts or repositories.
 
 #### API usage, failure behavior, and rollout
