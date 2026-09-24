@@ -169,6 +169,8 @@ These REST requirements are listed in [GitHub's App permission reference](https:
 
 A live GitHub.com probe with a classic OAuth token confirmed that `permissionSources` and `roleName` require the `admin:org` scope; `repo` plus `read:org` was rejected. This is a classic-token scope requirement, not evidence that an App installation token has access. Validate the App separately rather than broadening an operator's token automatically.
 
+The backend deliberately does not request the unused effective `permission` field. A live CI calculation with an `admin:org`-only token showed that field requires an additional `public_repo` scope. Exact direct roles come from `permissionSources.roleName`, so requesting effective permissions would add an unnecessary credential requirement.
+
 In a designated disposable repository, give an active organization member a direct role and a different, higher inherited role. Verify the direct source reports the lower role, then add/change/remove the direct grant using the installation token. Expect `204` for organization-member adds, updates, and removals. `201` indicates an invitation rather than active access; the backend warns and does not cache it as a completed grant. Confirm inherited and outside access remain unchanged and a subsequent run has no diff. Do not run this check against production accounts or repositories.
 
 #### API usage, failure behavior, and rollout

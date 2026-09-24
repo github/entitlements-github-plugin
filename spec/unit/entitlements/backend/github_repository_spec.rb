@@ -326,6 +326,15 @@ describe Entitlements::Backend::GitHubRepository do
       expect(service.read_repository("app").roles).to eq("alice" => "triage")
     end
 
+    it "does not request the unused effective permission field or its additional token scope" do
+      request = stub_request(:post, "https://api.github.com/graphql").with do |req|
+        query = JSON.parse(req.body).fetch("query")
+        query.include?("permissionSources { roleName") && !query.match?(/\bpermission\b/)
+      end.to_return(status: 200, body: JSON.generate(page([edge("alice", "read").reject { |key, _| key == "permission" }])))
+      expect(service.read_repository("app").roles).to eq("alice" => "read")
+      expect(request).to have_been_requested.once
+    end
+
     described_class::ROLES.each_key do |role|
       it "reads canonical role #{role}" do
         stub_page(page([edge("alice", role)]))

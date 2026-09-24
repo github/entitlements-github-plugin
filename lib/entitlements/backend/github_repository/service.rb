@@ -61,7 +61,6 @@ module Entitlements
                 collaborators(affiliation: DIRECT, first: 100, after: #{JSON.generate(cursor)}) {
                   edges {
                     node { login }
-                    permission
                     permissionSources { roleName source { __typename } }
                   }
                   pageInfo { hasNextPage endCursor }
