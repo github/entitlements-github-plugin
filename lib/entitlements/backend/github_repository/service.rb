@@ -12,9 +12,10 @@ module Entitlements
           end
         end
 
-        def read_repository(repository)
+        def read_repository(repository, refresh: false)
           Configuration.validate_repository!(repository)
           @repositories ||= {}
+          @repositories.delete(repository.downcase) if refresh
           @repositories[repository.downcase] ||= begin
             roles = {}
             cursor = nil
@@ -31,7 +32,7 @@ module Entitlements
                 GitHubRepository.fail!("Missing or repeated repository pagination cursor")
               end
             end
-            Models::RepositoryAccess.new(repository: repository, roles: roles, ou: ou)
+            Models::RepositoryAccess.new(repository: repository, roles: roles, teams: repository_teams(repository), ou: ou)
           end
         rescue KeyError, TypeError => e
           GitHubRepository.fail!("Malformed repository response for #{repository}: #{e.message}")
@@ -39,10 +40,14 @@ module Entitlements
 
         def apply(repository, instructions)
           Configuration.validate_repository!(repository)
-          instructions.sort_by { |instruction| [instruction.fetch(:action) == :upsert ? 0 : 1, instruction.fetch(:login).downcase] }.each do |instruction|
+          instructions.partition { |instruction| instruction.fetch(:action) == :upsert }.flatten.each do |instruction|
+            if instruction.fetch(:action) == :remove_team
+              remove_team(repository, instruction)
+              next
+            end
             login = instruction.fetch(:login)
             Configuration.validate_login!(login)
-            unless active_members.key?(login.downcase)
+            if instruction.fetch(:action) == :upsert && !active_members.key?(login.downcase)
               GitHubRepository.fail!("#{repository}: #{login} is not an active non-owner organization member")
             end
             mutate(repository, instruction)
@@ -53,6 +58,32 @@ module Entitlements
         end
 
         private
+
+        def repository_teams(repository)
+          teams = octokit.repository_teams("#{org}/#{repository}")
+          GitHubRepository.fail!("Malformed repository teams for #{repository}") unless teams.is_a?(Array)
+          teams.map do |team|
+            unless team.is_a?(Sawyer::Resource) && team.key?(:parent) &&
+                (team[:parent].nil? || (team[:parent].is_a?(Sawyer::Resource) && team[:parent][:id].is_a?(Integer)))
+              GitHubRepository.fail!("Malformed repository team response for #{repository}")
+            end
+            { id: team[:id], slug: team[:slug], parent_id: team[:parent]&.[](:id) }
+          end
+        rescue Octokit::Error => e
+          GitHubRepository.fail!("Reading teams for #{org}/#{repository} failed: #{e.message}")
+        end
+
+        def remove_team(repository, instruction)
+          # Removing a parent association can also remove inherited child access.
+          current = Models::RepositoryAccess.new(repository: repository, roles: {}, teams: repository_teams(repository), ou: ou)
+          team = current.teams[instruction.fetch(:team_id)]
+          return unless team
+          GitHubRepository.fail!("Repository team identity changed") unless team[:slug] == instruction.fetch(:slug)
+          octokit.delete("orgs/#{org}/teams/#{team[:slug]}/repos/#{org}/#{repository}")
+          GitHubRepository.fail!("Unexpected team removal response: HTTP #{octokit.last_response.status}") unless octokit.last_response.status == 204
+        rescue Octokit::Error => e
+          GitHubRepository.fail!("Removing team from #{org}/#{repository} failed: #{e.message}")
+        end
 
         def collaborators(repository, cursor)
           query = <<~GRAPHQL
@@ -87,7 +118,6 @@ module Entitlements
           end
           login = edge.fetch("node").fetch("login")
           Configuration.validate_login!(login)
-          return unless active_members.key?(login.downcase)
           direct = edge.fetch("permissionSources").select do |source|
             unless source.is_a?(Hash) && source["source"].is_a?(Hash)
               GitHubRepository.fail!("Malformed repository permission source")
@@ -96,6 +126,7 @@ module Entitlements
             unless %w[Repository Team Organization EnterpriseTeam].include?(type)
               GitHubRepository.fail!("Unknown repository permission source: #{type.inspect}")
             end
+            GitHubRepository.fail!("Unsupported enterprise-team access for #{login}") if type == "EnterpriseTeam"
             type == "Repository"
           end
           return if direct.empty?
