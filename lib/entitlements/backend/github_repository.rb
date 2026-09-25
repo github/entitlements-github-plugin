@@ -25,6 +25,7 @@ module Entitlements
   end
 end
 
+require_relative "github_repository/models/organization_access"
 require_relative "github_repository/models/repository_access"
 require_relative "github_repository/configuration"
 require_relative "github_repository/service"

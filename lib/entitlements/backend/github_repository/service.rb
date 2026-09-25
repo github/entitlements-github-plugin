@@ -5,11 +5,49 @@ module Entitlements
     class GitHubRepository
       class Service < Entitlements::Service::GitHub
         def active_members
-          # Never use predictive membership to authorize a new direct grant.
-          @active_members ||= begin
-            invalidate_org_members_predictive_cache
-            org_members.transform_keys(&:downcase).select { |_, role| role == "member" }
+          organization_access.members
+        end
+
+        def organization_access(refresh: false)
+          @organization_access = nil if refresh
+          @organization_access ||= begin
+            # Use this installation's live view, never another backend's predictive/JIT cache.
+            members = members_and_roles_from_rest.transform_values(&:downcase)
+            organization = octokit.organization(org)
+            GitHubRepository.fail!("Missing organization access settings for #{org}") unless organization.is_a?(Sawyer::Resource)
+            base_role = organization[:default_repository_permission]
+            data = octokit.get("orgs/#{org}/organization-roles")
+            unless data.is_a?(Sawyer::Resource) && data[:roles].is_a?(Array) &&
+                data[:total_count].is_a?(Integer) && data[:total_count] == data[:roles].length
+              GitHubRepository.fail!("Incomplete organization role catalog for #{org}")
+            end
+            assignments = {}
+            seen = Set.new
+            data[:roles].each do |role|
+              unless role.is_a?(Sawyer::Resource) && role[:id].is_a?(Integer) && role[:id].positive? &&
+                  seen.add?(role[:id]) && role[:name].is_a?(String) && !role[:name].empty? &&
+                  role.key?(:base_role) && (role[:base_role].nil? || ROLES.key?(role[:base_role])) &&
+                  role[:permissions].is_a?(Array) && role[:permissions].all? { |permission| permission.is_a?(String) }
+                GitHubRepository.fail!("Malformed organization role for #{org}")
+              end
+              grant = { id: role[:id], name: role[:name], base_role: role[:base_role], permissions: role[:permissions].sort.freeze }.freeze
+              users = octokit.paginate("orgs/#{org}/organization-roles/#{role[:id]}/users")
+              GitHubRepository.fail!("Malformed organization role assignments") unless users.is_a?(Array)
+              logins = Set.new
+              users.each do |user|
+                unless user.is_a?(Sawyer::Resource) && %w[direct indirect mixed].include?(user[:assignment])
+                  GitHubRepository.fail!("Malformed organization role assignee")
+                end
+                login = user[:login]
+                Configuration.validate_login!(login)
+                GitHubRepository.fail!("Duplicate organization role assignee: #{login}") unless logins.add?(login.downcase)
+                (assignments[login.downcase] ||= []) << grant
+              end
+            end
+            Models::OrganizationAccess.new(members: members, base_role: base_role, assignments: assignments)
           end
+        rescue Octokit::Error => e
+          GitHubRepository.fail!("Reading organization access for #{org} failed: #{e.message}")
         end
 
         def read_repository(repository, refresh: false)
@@ -17,12 +55,13 @@ module Entitlements
           @repositories ||= {}
           @repositories.delete(repository.downcase) if refresh
           @repositories[repository.downcase] ||= begin
+            access = organization_access(refresh: refresh)
             roles = {}
             cursor = nil
             cursors = Set.new
             loop do
               connection = collaborators(repository, cursor)
-              connection.fetch("edges").each { |edge| read_edge(edge, roles) }
+              connection.fetch("edges").each { |edge| read_edge(edge, roles, access) }
               page = connection.fetch("pageInfo")
               more = page.fetch("hasNextPage")
               GitHubRepository.fail!("Malformed repository pagination") unless [true, false].include?(more)
@@ -32,7 +71,8 @@ module Entitlements
                 GitHubRepository.fail!("Missing or repeated repository pagination cursor")
               end
             end
-            Models::RepositoryAccess.new(repository: repository, roles: roles, teams: repository_teams(repository), ou: ou)
+            Models::RepositoryAccess.new(repository: repository, roles: roles, teams: repository_teams(repository),
+              organization_access: access, ou: ou)
           end
         rescue KeyError, TypeError => e
           GitHubRepository.fail!("Malformed repository response for #{repository}: #{e.message}")
@@ -47,8 +87,11 @@ module Entitlements
             end
             login = instruction.fetch(:login)
             Configuration.validate_login!(login)
+            if organization_access.owner?(login)
+              GitHubRepository.fail!("#{repository}: direct grants for owner #{login} are deferred; recalculate")
+            end
             if instruction.fetch(:action) == :upsert && !active_members.key?(login.downcase)
-              GitHubRepository.fail!("#{repository}: #{login} is not an active non-owner organization member")
+              GitHubRepository.fail!("#{repository}: #{login} is not an active organization member")
             end
             mutate(repository, instruction)
           end
@@ -67,7 +110,12 @@ module Entitlements
                 (team[:parent].nil? || (team[:parent].is_a?(Sawyer::Resource) && team[:parent][:id].is_a?(Integer)))
               GitHubRepository.fail!("Malformed repository team response for #{repository}")
             end
-            { id: team[:id], slug: team[:slug], parent_id: team[:parent]&.[](:id) }
+            source = team[:access_source]
+            unless %w[direct organization enterprise].include?(source) && %w[organization enterprise].include?(team[:type]) &&
+                (source != "direct" || team[:type] == "organization")
+              GitHubRepository.fail!("Missing or unsupported repository team access_source")
+            end
+            { id: team[:id], slug: team[:slug], parent_id: team[:parent]&.[](:id), access_source: source }
           end
         rescue Octokit::Error => e
           GitHubRepository.fail!("Reading teams for #{org}/#{repository} failed: #{e.message}")
@@ -79,6 +127,7 @@ module Entitlements
           team = current.teams[instruction.fetch(:team_id)]
           return unless team
           GitHubRepository.fail!("Repository team identity changed") unless team[:slug] == instruction.fetch(:slug)
+          GitHubRepository.fail!("Repository team access source changed; recalculate") unless team[:access_source] == "direct"
           octokit.delete("orgs/#{org}/teams/#{team[:slug]}/repos/#{org}/#{repository}")
           GitHubRepository.fail!("Unexpected team removal response: HTTP #{octokit.last_response.status}") unless octokit.last_response.status == 204
         rescue Octokit::Error => e
@@ -112,8 +161,9 @@ module Entitlements
           connection
         end
 
-        def read_edge(edge, roles)
-          unless edge.is_a?(Hash) && edge["node"].is_a?(Hash) && edge["permissionSources"].is_a?(Array)
+        def read_edge(edge, roles, access)
+          unless edge.is_a?(Hash) && edge["node"].is_a?(Hash) &&
+              edge["permissionSources"].is_a?(Array) && !edge["permissionSources"].empty?
             GitHubRepository.fail!("Missing or malformed repository permission sources")
           end
           login = edge.fetch("node").fetch("login")
@@ -126,9 +176,10 @@ module Entitlements
             unless %w[Repository Team Organization EnterpriseTeam].include?(type)
               GitHubRepository.fail!("Unknown repository permission source: #{type.inspect}")
             end
-            GitHubRepository.fail!("Unsupported enterprise-team access for #{login}") if type == "EnterpriseTeam"
             type == "Repository"
           end
+          # GitHub emits synthetic Repository admin sources for organization owners.
+          return if access.owner?(login)
           return if direct.empty?
           GitHubRepository.fail!("Ambiguous direct repository permissions for #{login}") unless direct.size == 1
           role = direct.first.fetch("roleName")

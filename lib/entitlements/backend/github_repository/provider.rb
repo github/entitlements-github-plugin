@@ -16,11 +16,20 @@ module Entitlements
           existing = @github.read_repository(desired.repository)
           current = existing.roles.reject { |login, _| ignored.include?(login) }
           target = desired.roles.reject { |login, _| ignored.include?(login) }
+          access = existing.organization_access
+          GitHubRepository.fail!("Missing organization access snapshot") unless access.is_a?(Models::OrganizationAccess)
           effective = current.dup
           instructions = []
           (current.keys | target.keys).sort.each do |login|
             before = current[login]
             after = target[login]
+            sources = access.sources(login)
+            Entitlements.logger.info "#{desired.repository}: #{login} retains #{sources.join(', ')}" unless sources.empty?
+            floor = access.inherited_role(login)
+            if access.owner?(login) || (after && floor && ROLES.keys.index(after) < ROLES.keys.index(floor))
+              Entitlements.logger.warn "DEFER #{desired.repository}: #{login} direct role #{after || '(none)'}; inherited #{floor} via #{sources.join(', ')}; direct grants unchanged"
+              next
+            end
             next if before == after
             feature = if before.nil?
                         "add"
@@ -46,14 +55,21 @@ module Entitlements
               instructions << { action: :remove_team, team_id: team[:id], slug: team[:slug] }
               Entitlements.logger.info "CHANGE #{desired.repository}: team #{@config.fetch('org')}/#{team[:slug]} (granted) -> (none)"
             end
-            teams = []
-          elsif !teams.empty?
+            teams = teams.reject { |team| team[:access_source] == "direct" }
+          elsif !existing.direct_teams.empty?
             Entitlements.logger.warn("#{desired.repository}: remove disabled; individual-only repository grants are not enforced")
+          end
+          existing.teams.each_value do |team|
+            next if team[:access_source] == "direct"
+            Entitlements.logger.info "#{desired.repository}: preserving #{team[:access_source]} access for team #{@config.fetch('org')}/#{team[:slug]}"
+            if team[:access_source] == "enterprise"
+              Entitlements.logger.warn "#{desired.repository}: enterprise team #{team[:slug]} is unmanaged; individual-only policy is not fully enforced"
+            end
           end
           Entitlements.logger.info "#{desired.repository}: organization-level access and repository visibility are unchanged"
           return if instructions.empty?
           action = Entitlements::Models::Action.new(desired.dn,
-            snapshot(existing, current), snapshot(desired, effective, teams: teams), group_name, ignored_users: ignored)
+            snapshot(existing, current), snapshot(existing, effective, teams: teams), group_name, ignored_users: ignored)
           instructions.partition { |instruction| instruction[:action] == :upsert }.flatten.each do |instruction|
             action.add_implementation(instruction)
           end
@@ -79,7 +95,8 @@ module Entitlements
         private
 
         def snapshot(source, roles, teams: source.teams.values)
-          Models::RepositoryAccess.new(repository: source.repository, roles: roles, teams: teams, ou: @config.fetch("base"))
+          Models::RepositoryAccess.new(repository: source.repository, roles: roles, teams: teams,
+            organization_access: source.organization_access, ou: @config.fetch("base"))
         end
 
         def filtered_snapshot(source, ignored)
@@ -89,7 +106,7 @@ module Entitlements
         def validate_members(desired, ignored)
           invalid = desired.roles.keys - @github.active_members.keys - ignored.to_a
           return if invalid.empty?
-          message = "#{desired.repository}: not active non-owner organization members: #{invalid.join(', ')}"
+          message = "#{desired.repository}: not active organization members: #{invalid.join(', ')}"
           GitHubRepository.fail!(message) unless @config.fetch("ignore_not_found", false)
           Entitlements.logger.warn("#{message}; ignored")
           ignored.merge(invalid)

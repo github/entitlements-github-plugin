@@ -5,11 +5,12 @@ module Entitlements
     class GitHubRepository
       module Models
         class RepositoryAccess < Entitlements::Models::Group
-          attr_reader :repository, :roles, :teams
+          attr_reader :repository, :roles, :teams, :organization_access
 
-          def initialize(repository:, roles:, ou:, teams: [])
+          def initialize(repository:, roles:, ou:, teams: [], organization_access: nil)
             Configuration.validate_repository!(repository)
             @repository = repository
+            @organization_access = organization_access
             @roles = {}
             @logins = {}
             roles.sort_by { |login, _| login.downcase }.each do |login, role|
@@ -27,6 +28,7 @@ module Entitlements
             teams.each do |team|
               unless team.is_a?(Hash) && team[:id].is_a?(Integer) && team[:id].positive? &&
                   team[:slug].is_a?(String) && /\A[a-zA-Z0-9_-]+\z/.match?(team[:slug]) &&
+                  %w[direct organization enterprise].include?(team[:access_source]) &&
                   (team[:parent_id].nil? || (team[:parent_id].is_a?(Integer) && team[:parent_id].positive?))
                 GitHubRepository.fail!("Malformed repository team: #{team.inspect}")
               end
@@ -41,7 +43,7 @@ module Entitlements
           end
 
           def ordered_teams
-            remaining = teams.dup
+            remaining = direct_teams.dup
             ordered = []
             until remaining.empty?
               roots = remaining.values.reject { |team| remaining.key?(team[:parent_id]) }.sort_by { |team| team[:slug].downcase }
@@ -49,6 +51,10 @@ module Entitlements
               roots.each { |team| ordered << remaining.delete(team[:id]) }
             end
             ordered
+          end
+
+          def direct_teams
+            teams.select { |_, team| team[:access_source] == "direct" }
           end
 
           def role_for(login)
@@ -60,7 +66,8 @@ module Entitlements
           end
 
           def equals?(other)
-            other.is_a?(self.class) && dn.casecmp?(other.dn) && roles == other.roles && teams == other.teams
+            other.is_a?(self.class) && dn.casecmp?(other.dn) && roles == other.roles &&
+              direct_teams == other.direct_teams && organization_access == other.organization_access
           end
 
           alias_method :==, :equals?

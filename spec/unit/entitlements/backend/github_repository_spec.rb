@@ -13,20 +13,40 @@ describe Entitlements::Backend::GitHubRepository do
   let(:service) { backend::Service.new(org: "example", token: "test-token", ou: base) }
   let(:members) { { "alice" => "member", "bob" => "member", "carol" => "member", "owner" => "admin" } }
 
-  def access(roles = {}, repository: "app", teams: [], **inline_roles)
-    backend::Models::RepositoryAccess.new(repository: repository, roles: roles.merge(inline_roles), teams: teams, ou: base)
+  def access(roles = {}, repository: "app", teams: [], organization_access: nil, **inline_roles)
+    backend::Models::RepositoryAccess.new(repository: repository, roles: roles.merge(inline_roles), teams: teams,
+      organization_access: organization_access || self.organization_access, ou: base)
   end
 
-  def team(id = 1, slug = "engineering", parent_id = nil)
-    { id: id, slug: slug, parent_id: parent_id }
+  def team(id = 1, slug = "engineering", parent_id = nil, source = "direct")
+    { id: id, slug: slug, parent_id: parent_id, access_source: source }
   end
 
   def stub_teams(teams = [], endpoint: "https://api.github.com/repos/example/app/teams")
+    teams = teams.map { |entry| { access_source: "direct", type: "organization" }.merge(entry) }
     stub_request(:get, endpoint).with(query: { per_page: 100 })
       .to_return(status: 200, body: JSON.generate(teams), headers: { "Content-Type" => "application/json" })
   end
 
-  before { stub_teams }
+  def organization_access(base_role: "none", assignments: {}, membership: members)
+    backend::Models::OrganizationAccess.new(members: membership, base_role: base_role, assignments: assignments)
+  end
+
+  def organization_role(id = 10, base_role = "write", name = "all_repo_write")
+    { id: id, name: name, base_role: base_role, permissions: [] }
+  end
+
+  def stub_organization(base_role: "none", roles: [])
+    stub_request(:get, "https://api.github.com/orgs/example")
+      .to_return(status: 200, body: JSON.generate(default_repository_permission: base_role), headers: { "Content-Type" => "application/json" })
+    stub_request(:get, "https://api.github.com/orgs/example/organization-roles")
+      .to_return(status: 200, body: JSON.generate(total_count: roles.size, roles: roles), headers: { "Content-Type" => "application/json" })
+  end
+
+  before do
+    stub_teams
+    stub_organization
+  end
 
   def edge(login, role = "write", sources: nil)
     { "node" => { "login" => login }, "permission" => "ADMIN",
@@ -90,6 +110,30 @@ describe Entitlements::Backend::GitHubRepository do
       expect(model.equals?(access("alice" => "write", "bob" => "maintain"))).to be(false)
       expect(model.equals?(access({ "alice" => "read", "bob" => "maintain" }, repository: "other"))).to be(false)
       expect(model.equals?(:none)).to be(false)
+    end
+
+    describe "organization access model" do
+      it "combines base permissions, ownership and arbitrary assigned roles without matching names" do
+        role = organization_role(10, "maintain", "enterprise-defined-role")
+        context = organization_access(base_role: "read", assignments: { "ALICE" => [role] })
+        expect(context.inherited_role("alice")).to eq("maintain")
+        expect(context.inherited_role("bob")).to eq("read")
+        expect(context.inherited_role("owner")).to eq("admin")
+        expect(context.inherited_role("outsider")).to be_nil
+        expect(context.sources("ALICE")).to include('organization role "enterprise-defined-role"', "organization base read")
+        expect(context.sources("owner")).to include("organization ownership")
+        expect(context).to eq(organization_access(base_role: "read", assignments: { "alice" => [role] }))
+        expect(context).not_to eq(organization_access)
+        expect(context).not_to eq(nil)
+        expect(organization_access.inherited_role("alice")).to be_nil
+      end
+
+      it "rejects unavailable base settings or unsupported organization membership roles" do
+        [nil, "custom"].each do |role|
+          expect { organization_access(base_role: role) }.to raise_error(backend::Error, /Malformed organization access/)
+        end
+        expect { organization_access(membership: { "alice" => "unknown" }) }.to raise_error(backend::Error)
+      end
     end
 
     ["", ".", "..", "bad/repo", "bad repo", "a" * 101, nil].each do |name|
@@ -207,7 +251,7 @@ describe Entitlements::Backend::GitHubRepository do
     let(:provider) { backend::Provider.new(config: config) }
     before do
       allow(backend::Service).to receive(:new).and_return(service)
-      allow(service).to receive(:active_members).and_return(members.reject { |_, role| role == "admin" })
+      allow(service).to receive(:active_members).and_return(members)
     end
 
     described_class::FEATURES.length.succ.times.flat_map { |size| described_class::FEATURES.combination(size).to_a }.each do |features|
@@ -240,10 +284,9 @@ describe Entitlements::Backend::GitHubRepository do
       expect(provider.action_for(access("ALICE" => "read", "owner" => "write"), "repos")).to be_nil
     end
 
-    it "rejects desired non-members and owners before reading a repository" do
+    it "rejects desired non-members before reading a repository" do
       expect(service).not_to receive(:read_repository)
       expect { provider.action_for(access("outsider" => "read"), "repos") }.to raise_error(backend::Error, /not active/)
-      expect { provider.action_for(access("owner" => "read"), "repos") }.to raise_error(backend::Error, /not active/)
     end
 
     it "warns and ignores non-members when explicitly configured" do
@@ -283,6 +326,12 @@ describe Entitlements::Backend::GitHubRepository do
       expect { provider.commit(action) }.to raise_error(backend::Error, /Invalid repository action/)
     end
 
+    it "rejects observed state without organization access metadata" do
+      missing = backend::Models::RepositoryAccess.new(repository: "app", roles: {}, ou: base)
+      allow(service).to receive(:read_repository).and_return(missing)
+      expect { provider.action_for(access, "repos") }.to raise_error(backend::Error, /Missing organization access snapshot/)
+    end
+
     it "calculates and counts team-only actions without pretending teams are users" do
       desired = access
       allow(backend::Configuration).to receive(:new).and_return(instance_double(backend::Configuration, load: [desired]))
@@ -305,10 +354,10 @@ describe Entitlements::Backend::GitHubRepository do
       expect(action.implementation.map { |instruction| instruction[:action] }).to eq([:upsert])
     end
 
-    it "removes undeclared outside and owner direct grants as well as all teams" do
-      allow(service).to receive(:read_repository).and_return(access("outsider" => "read", "owner" => "admin", :teams => [team]))
+    it "removes undeclared outside direct grants as well as all direct teams" do
+      allow(service).to receive(:read_repository).and_return(access("outsider" => "read", :teams => [team]))
       action = provider.action_for(access("alice" => "read"), "repos")
-      expect(action.implementation.map { |instruction| instruction[:action] }).to eq([:upsert, :remove, :remove, :remove_team])
+      expect(action.implementation.map { |instruction| instruction[:action] }).to eq([:upsert, :remove, :remove_team])
       expect(action.updated.roles).to eq("alice" => "read")
     end
 
@@ -322,6 +371,71 @@ describe Entitlements::Backend::GitHubRepository do
       allow(service).to receive(:read_repository).with("app", refresh: true).and_return(action.existing)
       expect(service).to receive(:apply).with("app", action.implementation)
       expect { provider.commit(action) }.to raise_error(backend::Error, /did not converge/)
+    end
+
+    it "accepts desired owners without ignore_not_found and defers their ambiguous direct grants" do
+      allow(service).to receive(:read_repository).and_return(access(teams: [team], organization_access: organization_access))
+      expect(logger).to receive(:warn).with(/DEFER app: owner.*inherited admin.*organization ownership/)
+      action = provider.action_for(access("owner" => "read"), "repos")
+      expect(action.implementation).to eq([{ action: :remove_team, team_id: 1, slug: "engineering" }])
+      expect(action.ignored_users).to be_empty
+    end
+
+    described_class::ROLES.each_key do |role|
+      it "handles all-repository #{role} assignments and provisions equal direct grants" do
+        inherited = organization_access(assignments: { "alice" => [organization_role(10, role, "arbitrary-#{role}")] })
+        allow(service).to receive(:read_repository).and_return(access(organization_access: inherited))
+        action = provider.action_for(access("alice" => role), "repos")
+        expect(action.implementation).to eq([{ action: :upsert, login: "alice", permission: backend::ROLES.fetch(role) }])
+      end
+    end
+
+    it "defers lower desired roles without inventing a successful direct grant or raising inherited privileges" do
+      inherited = organization_access(assignments: { "alice" => [organization_role] })
+      current = access({ "alice" => "admin" }, teams: [team], organization_access: inherited)
+      allow(service).to receive(:read_repository).and_return(current)
+      expect(logger).to receive(:warn).with(/DEFER app: alice direct role read; inherited write/)
+      action = provider.action_for(access("alice" => "read"), "repos")
+      expect(action.updated.roles).to eq("alice" => "admin")
+      expect(action.implementation.map { |entry| entry[:action] }).to eq([:remove_team])
+    end
+
+    it "defers roles below organization base and continues to provision users above the base" do
+      allow(service).to receive(:read_repository).and_return(access(organization_access: organization_access(base_role: "write")))
+      expect(logger).to receive(:warn).with(/DEFER app: alice.*organization base write/)
+      action = provider.action_for(access("alice" => "read", "bob" => "admin"), "repos")
+      expect(action.updated.roles).to eq("bob" => "admin")
+    end
+
+    it "removes undeclared direct grants even when a non-owner retains organization-wide access" do
+      inherited = organization_access(assignments: { "alice" => [organization_role] })
+      allow(service).to receive(:read_repository).and_return(access({ "alice" => "admin" }, organization_access: inherited))
+      action = provider.action_for(access, "repos")
+      expect(action.implementation).to eq([{ action: :remove, login: "alice" }])
+    end
+
+    it "preserves organization and enterprise team sources while removing a direct association" do
+      teams = [team, team(2, "security", nil, "organization"), team(3, "enterprise", nil, "enterprise")]
+      allow(service).to receive(:read_repository).and_return(access(teams: teams, organization_access: organization_access))
+      action = provider.action_for(access, "repos")
+      expect(action.implementation).to eq([{ action: :remove_team, team_id: 1, slug: "engineering" }])
+      expect(action.updated.teams.keys).to eq([2, 3])
+      # A direct association can mask an organization-wide source for the same team.
+      expect(action.updated).to eq(access(teams: teams.map { |entry| entry.merge(access_source: "organization") },
+        organization_access: organization_access))
+    end
+
+    it "plans a direct grant after owner JIT expires and rejects plans if organization access changes" do
+      elevated = organization_access
+      demoted = organization_access(membership: members.merge("owner" => "member"))
+      allow(service).to receive(:read_repository).and_return(access(organization_access: elevated))
+      expect(provider.action_for(access("owner" => "read"), "repos")).to be_nil
+      allow(service).to receive(:read_repository).and_return(access(organization_access: demoted))
+      action = provider.action_for(access("owner" => "read"), "repos")
+      expect(action.implementation).to eq([{ action: :upsert, login: "owner", permission: "pull" }])
+      allow(service).to receive(:read_repository).with("app", refresh: true).and_return(access(organization_access: elevated))
+      expect(service).not_to receive(:apply)
+      expect { provider.commit(action) }.to raise_error(backend::Error, /changed since calculation/)
     end
   end
 
@@ -348,7 +462,7 @@ describe Entitlements::Backend::GitHubRepository do
       put = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/balinese")
         .with(body: { permission: "push" }).to_return(status: 204)
       delete = stub_request(:delete, "https://api.github.com/repos/example/app/collaborators/bob").to_return(status: 204)
-      %w[outsider owner].each do |login|
+      %w[outsider].each do |login|
         stub_request(:delete, "https://api.github.com/repos/example/app/collaborators/#{login}").to_return(status: 204)
       end
       remove_team = stub_request(:delete, "https://api.github.com/orgs/example/teams/engineering/repos/example/app").to_return do
@@ -361,27 +475,124 @@ describe Entitlements::Backend::GitHubRepository do
         controller = backend::Controller.new("repos", config.merge("dir" => root))
         actions = controller.calculate
         expect(actions.size).to eq(1)
-        expect(actions.first.implementation.size).to eq(5)
+        expect(actions.first.implementation.size).to eq(4)
         controller.apply(actions.first)
         expect(controller.calculate).to eq([])
       end
       expect(put).to have_been_requested.once
       expect(delete).to have_been_requested.once
-      expect(members_request).to have_been_requested.once
+      expect(members_request).to have_been_requested.times(3)
       expect(remove_team).to have_been_requested.once
       expect(a_request(:delete, "https://api.github.com/repos/example/app/collaborators/carol")).not_to have_been_made
+      expect(a_request(:delete, "https://api.github.com/repos/example/app/collaborators/owner")).not_to have_been_made
     end
   end
 
   describe "GitHub transport" do
     before do
-      allow(service).to receive(:org_members).and_return(members)
-      allow(service).to receive(:org_members_from_predictive_cache?).and_return(false)
+      allow(service).to receive(:members_and_roles_from_rest).and_return(members.transform_values(&:upcase))
     end
 
-    it "uses the organization membership cache and excludes owners" do
-      expect(service).to receive(:invalidate_org_members_predictive_cache)
-      expect(service.active_members).to eq(members.reject { |_, role| role == "admin" })
+    it "uses live installation-specific organization membership and accepts owners" do
+      expect(service).not_to receive(:org_members)
+      expect(service.active_members).to eq(members)
+    end
+
+    it "reads all catalog roles and paginates direct, indirect and mixed user assignments" do
+      roles = [organization_role, organization_role(11, nil, "custom-org-capabilities"),
+        organization_role(12, "read", "security_manager")]
+      stub_organization(roles: roles)
+      stub_request(:get, "https://api.github.com/orgs/example/organization-roles/10/users").with(query: { per_page: 100 })
+        .to_return(status: 200, body: '[{"login":"ALICE","assignment":"direct"}]',
+          headers: { "Content-Type" => "application/json", "Link" => '<https://api.github.com/orgs/example/organization-roles/10/users?page=2&per_page=100>; rel="next"' })
+      stub_request(:get, "https://api.github.com/orgs/example/organization-roles/10/users").with(query: { per_page: 100, page: 2 })
+        .to_return(status: 200, body: '[{"login":"bob","assignment":"indirect"},{"login":"carol","assignment":"mixed"}]',
+          headers: { "Content-Type" => "application/json" })
+      [11, 12].each do |id|
+        stub_request(:get, "https://api.github.com/orgs/example/organization-roles/#{id}/users").with(query: { per_page: 100 })
+          .to_return(status: 200, body: '[{"login":"alice","assignment":"indirect"}]', headers: { "Content-Type" => "application/json" })
+      end
+      context = service.organization_access
+      expect(context.assignments["alice"].size).to eq(3)
+      expect(context.inherited_role("alice")).to eq("write")
+      expect(context.inherited_role("bob")).to eq("write")
+      expect(context.inherited_role("carol")).to eq("write")
+      expect(context.sources("alice")).to include('organization role "security_manager"', 'organization role "custom-org-capabilities"')
+    end
+
+    it "fails closed when organization settings, role catalog or assignments are unavailable" do
+      stub_request(:get, "https://api.github.com/orgs/example").to_return(status: 200, body: "null",
+        headers: { "Content-Type" => "application/json" })
+      expect { service.organization_access }.to raise_error(backend::Error, /Missing organization access/)
+      stub_organization(base_role: nil)
+      expect { service.organization_access }.to raise_error(backend::Error, /Malformed organization access/)
+      stub_organization
+      ["{}", '{"roles":[],"total_count":1}', '{"roles":null,"total_count":0}'].each do |body|
+        stub_request(:get, "https://api.github.com/orgs/example/organization-roles")
+          .to_return(status: 200, body: body, headers: { "Content-Type" => "application/json" })
+        expect { service.organization_access }.to raise_error(backend::Error, /Incomplete/)
+      end
+      [403, 404].each do |status|
+        stub_request(:get, "https://api.github.com/orgs/example/organization-roles").to_return(status: status)
+        expect { service.organization_access }.to raise_error(backend::Error, /Reading organization access/)
+      end
+    end
+
+    it "rejects malformed or unsupported roles and malformed or duplicate assignees" do
+      [organization_role(0), organization_role(10, "unknown"), organization_role.merge(permissions: [nil]),
+        organization_role.reject { |key, _| key == :base_role }].each do |role|
+        stub_organization(roles: [role])
+        expect { service.organization_access }.to raise_error(backend::Error, /Malformed organization role/)
+      end
+      stub_organization(roles: [organization_role])
+      ["{}", "[{}]", '[{"login":"alice","assignment":"unknown"}]',
+        '[{"login":"alice","assignment":"direct"},{"login":"ALICE","assignment":"indirect"}]'].each do |body|
+        stub_request(:get, "https://api.github.com/orgs/example/organization-roles/10/users").with(query: { per_page: 100 })
+          .to_return(status: 200, body: body, headers: { "Content-Type" => "application/json" })
+        expect { service.organization_access }.to raise_error(backend::Error)
+      end
+    end
+
+    it "does not treat synthetic owner Repository grants as removable direct grants" do
+      sources = [{ "source" => { "__typename" => "Organization" }, "roleName" => nil },
+        { "source" => { "__typename" => "Repository" }, "roleName" => "admin" },
+        { "source" => { "__typename" => "Repository" }, "roleName" => "read" }]
+      stub_page(page([edge("owner", sources: sources)]))
+      expect(service.read_repository("app").roles).to be_empty
+    end
+
+    it "rejects owner mutations even if an invalid instruction bypassed the planner" do
+      [:upsert, :remove].each do |action|
+        expect { service.apply("app", [{ action: action, login: "owner", permission: "pull" }]) }
+          .to raise_error(backend::Error, /owner.*deferred/)
+      end
+      expect(a_request(:put, /collaborators/)).not_to have_been_made
+      expect(a_request(:delete, /collaborators/)).not_to have_been_made
+    end
+
+    it "preserves enterprise permission sources and reads only an accompanying explicit user grant" do
+      sources = [{ "source" => { "__typename" => "EnterpriseTeam" }, "roleName" => "admin" },
+        { "source" => { "__typename" => "Repository" }, "roleName" => "read" }]
+      stub_page(page([edge("alice", sources: sources)]))
+      stub_teams([{ id: 9, slug: "enterprise", parent: nil, type: "enterprise", access_source: "enterprise" }])
+      snapshot = service.read_repository("app")
+      expect(snapshot.roles).to eq("alice" => "read")
+      expect(snapshot.direct_teams).to be_empty
+    end
+
+    it "rejects team lists without source metadata instead of guessing that grants are direct" do
+      stub_page(page([]))
+      stub_teams([{ id: 1, slug: "team", parent: nil, access_source: nil }])
+      expect { service.read_repository("app") }.to raise_error(backend::Error, /access_source/)
+      stub_teams([{ id: 1, slug: "team", parent: nil, type: "enterprise" }])
+      expect { service.read_repository("app") }.to raise_error(backend::Error, /access_source/)
+    end
+
+    it "refuses to delete a team whose source became organization-wide" do
+      stub_teams([{ id: 1, slug: "team", parent: nil, access_source: "organization" }])
+      expect { service.apply("app", [{ action: :remove_team, team_id: 1, slug: "team" }]) }
+        .to raise_error(backend::Error, /access source changed/)
+      expect(a_request(:delete, /teams/)).not_to have_been_made
     end
 
     it "paginates, uses direct roles instead of effective permissions, and caches per repository" do
@@ -391,8 +602,8 @@ describe Entitlements::Backend::GitHubRepository do
       request = stub_request(:post, "https://api.github.com/graphql")
         .with(headers: { "Authorization" => "bearer test-token" })
         .to_return({ status: 200, body: JSON.generate(first) }, { status: 200, body: JSON.generate(second) })
-      expect(service.read_repository("app").roles).to eq("alice" => "read", "carol" => "maintain", "outsider" => "write", "owner" => "write")
-      expect(service.read_repository("APP").roles).to eq("alice" => "read", "carol" => "maintain", "outsider" => "write", "owner" => "write")
+      expect(service.read_repository("app").roles).to eq("alice" => "read", "carol" => "maintain", "outsider" => "write")
+      expect(service.read_repository("APP").roles).to eq("alice" => "read", "carol" => "maintain", "outsider" => "write")
       expect(request).to have_been_requested.twice
       expect(a_request(:post, "https://api.github.com/graphql").with { |req|
         JSON.parse(req.body).fetch("query").include?('after: "a\\"b"')
@@ -441,7 +652,7 @@ describe Entitlements::Backend::GitHubRepository do
         edge("alice", sources: [nil]),
         edge("alice", sources: [{ "source" => {} }]),
         edge("alice", sources: [{ "source" => { "__typename" => nil } }]),
-        edge("alice", sources: [{ "source" => { "__typename" => "EnterpriseTeam" } }]),
+        edge("alice", sources: []),
         edge("alice", sources: [edge("alice")["permissionSources"].first] * 2),
         edge("../alice")
       ].each do |invalid|
@@ -567,6 +778,7 @@ describe Entitlements::Backend::GitHubRepository do
     it "uses GHES REST and GraphQL API paths" do
       enterprise = backend::Service.new(org: "example", token: "test-token", ou: base, addr: "https://github.test/api/v3/")
       allow(enterprise).to receive(:active_members).and_return(members)
+      allow(enterprise).to receive(:organization_access).and_return(organization_access)
       stub_teams([], endpoint: "https://github.test/api/v3/repos/example/app/teams")
       stub_page(page([edge("alice")]), endpoint: "https://github.test/api/graphql")
       expect(enterprise.read_repository("app").role_for("alice")).to eq("write")
@@ -578,10 +790,10 @@ describe Entitlements::Backend::GitHubRepository do
     it "paginates repository teams including empty teams, independent of collaborators" do
       stub_page(page([]))
       stub_request(:get, "https://api.github.com/repos/example/app/teams").with(query: { per_page: 100 })
-        .to_return(status: 200, body: '[{"id":1,"slug":"empty","parent":null}]',
+        .to_return(status: 200, body: '[{"id":1,"slug":"empty","parent":null,"type":"organization","access_source":"direct"}]',
           headers: { "Content-Type" => "application/json", "Link" => '<https://api.github.com/repos/example/app/teams?page=2&per_page=100>; rel="next"' })
       stub_request(:get, "https://api.github.com/repos/example/app/teams").with(query: { per_page: 100, page: 2 })
-        .to_return(status: 200, body: '[{"id":2,"slug":"child","parent":{"id":1}}]', headers: { "Content-Type" => "application/json" })
+        .to_return(status: 200, body: '[{"id":2,"slug":"child","parent":{"id":1},"type":"organization","access_source":"direct"}]', headers: { "Content-Type" => "application/json" })
       snapshot = service.read_repository("app")
       expect(snapshot.roles).to be_empty
       expect(snapshot.ordered_teams).to eq([team(1, "empty"), team(2, "child", 1)])
@@ -589,7 +801,8 @@ describe Entitlements::Backend::GitHubRepository do
 
     it "rejects inaccessible or malformed repository team lists" do
       stub_page(page([]))
-      ["{}", "[{}]", '[{"id":1,"slug":"team","parent":{}}]', '[{"id":0,"slug":"team","parent":null}]'].each do |body|
+      ["{}", "[{}]", '[{"id":1,"slug":"team","parent":{}}]',
+        '[{"id":0,"slug":"team","parent":null,"type":"organization","access_source":"direct"}]'].each do |body|
         stub_request(:get, "https://api.github.com/repos/example/app/teams").with(query: { per_page: 100 })
           .to_return(status: 200, body: body, headers: { "Content-Type" => "application/json" })
         expect { service.read_repository("app") }.to raise_error(backend::Error, /Malformed/)
