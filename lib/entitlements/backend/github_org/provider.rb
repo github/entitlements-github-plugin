@@ -104,7 +104,8 @@ module Entitlements
         # Returns an Entitlements::Models::Group object.
         Contract String => Entitlements::Models::Group
         def role_to_group(role)
-          members = github.org_members.keys.select { |username| github.org_members[username] == role }
+          org_members = github.org_members
+          members = org_members.select { |_, member_role| member_role == role }.keys
           Entitlements::Models::Group.new(
             dn: role_dn(role),
             members: Set.new(members),
