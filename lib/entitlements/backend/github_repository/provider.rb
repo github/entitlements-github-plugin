@@ -4,12 +4,28 @@ module Entitlements
   class Backend
     class GitHubRepository
       class Provider < Entitlements::Backend::BaseProvider
+        include ::Contracts::Core
+        C = ::Contracts
+
+        # Constructor.
+        #
+        # config - Configuration provided for the controller instantiation.
+        Contract C::KeywordArgs[
+          config: C::HashOf[String => C::Any],
+        ] => C::Any
         def initialize(config:)
           @config = config
           @github = Service.new(org: config.fetch("org"), token: config.fetch("token"),
             ou: config.fetch("base"), addr: config["addr"])
         end
 
+        # Calculate direct grant changes without modifying inherited access.
+        #
+        # desired    - Repository access model containing the desired user roles.
+        # group_name - Name of the corresponding group in the entitlements configuration file.
+        #
+        # Returns an action, or nil if no enabled changes are needed.
+        Contract Models::RepositoryAccess, String => C::Maybe[Entitlements::Models::Action]
         def action_for(desired, group_name)
           ignored = Set.new(@config.fetch("ignore", []).map(&:downcase))
           validate_members(desired, ignored)
@@ -76,6 +92,12 @@ module Entitlements
           action
         end
 
+        # Commit changes, checking for drift before applying and convergence afterward.
+        #
+        # action - An Entitlements::Models::Action object.
+        #
+        # Returns nothing.
+        Contract Entitlements::Models::Action => nil
         def commit(action)
           unless action.existing.is_a?(Models::RepositoryAccess) && action.updated.is_a?(Models::RepositoryAccess) &&
               action.existing.dn == action.updated.dn && action.implementation.is_a?(Array)
@@ -94,15 +116,38 @@ module Entitlements
 
         private
 
+        # Copy a repository snapshot with the specified direct grants.
+        #
+        # source - Repository access model supplying the identity and organization access.
+        # roles  - Hash mapping user logins to repository roles.
+        # teams  - Array of team grants, defaulting to the source's teams.
+        #
+        # Returns a repository access model.
+        Contract Models::RepositoryAccess, C::HashOf[String => String],
+          C::KeywordArgs[teams: C::Optional[C::ArrayOf[Hash]]] => Models::RepositoryAccess
         def snapshot(source, roles, teams: source.teams.values)
           Models::RepositoryAccess.new(repository: source.repository, roles: roles, teams: teams,
             organization_access: source.organization_access, ou: @config.fetch("base"))
         end
 
+        # Exclude ignored users from a repository snapshot.
+        #
+        # source  - Repository access model.
+        # ignored - Set of lowercase user logins.
+        #
+        # Returns a repository access model.
+        Contract Models::RepositoryAccess, C::SetOf[String] => Models::RepositoryAccess
         def filtered_snapshot(source, ignored)
           snapshot(source, source.roles.reject { |login, _| ignored.include?(login) })
         end
 
+        # Reject nonmembers or add them to the ignored users when configured.
+        #
+        # desired - Repository access model containing the desired user roles.
+        # ignored - Set of lowercase user logins, updated in place.
+        #
+        # Returns the updated Set, or nil if every non-ignored user is a member.
+        Contract Models::RepositoryAccess, C::SetOf[String] => C::Maybe[C::SetOf[String]]
         def validate_members(desired, ignored)
           invalid = desired.roles.keys - @github.active_members.keys - ignored.to_a
           return if invalid.empty?

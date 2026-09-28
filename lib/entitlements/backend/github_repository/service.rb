@@ -4,10 +4,25 @@ module Entitlements
   class Backend
     class GitHubRepository
       class Service < Entitlements::Service::GitHub
+        include ::Contracts::Core
+        C = ::Contracts
+
+        # Read active organization members from the current access snapshot.
+        #
+        # Takes no arguments.
+        #
+        # Returns a Hash mapping user logins to membership roles.
+        Contract C::None => C::HashOf[String => String]
         def active_members
           organization_access.members
         end
 
+        # Read organization membership, base permissions and organization role assignments.
+        #
+        # refresh - Boolean indicating whether to discard the cached snapshot.
+        #
+        # Returns an organization access model.
+        Contract C::KeywordArgs[refresh: C::Optional[C::Bool]] => Models::OrganizationAccess
         def organization_access(refresh: false)
           @organization_access = nil if refresh
           @organization_access ||= begin
@@ -39,7 +54,6 @@ module Entitlements
                   GitHubRepository.fail!("Malformed organization role assignee")
                 end
                 login = user[:login]
-                Configuration.validate_login!(login)
                 GitHubRepository.fail!("Duplicate organization role assignee: #{login}") unless logins.add?(login.downcase)
                 (assignments[login.downcase] ||= []) << grant
               end
@@ -50,6 +64,13 @@ module Entitlements
           GitHubRepository.fail!("Reading organization access for #{org} failed: #{e.message}")
         end
 
+        # Read direct user and team grants together with organization-level access.
+        #
+        # repository - String with the repository name.
+        # refresh    - Boolean indicating whether to discard cached repository and organization access.
+        #
+        # Returns a repository access model.
+        Contract String, C::KeywordArgs[refresh: C::Optional[C::Bool]] => Models::RepositoryAccess
         def read_repository(repository, refresh: false)
           Configuration.validate_repository!(repository)
           @repositories ||= {}
@@ -78,6 +99,13 @@ module Entitlements
           GitHubRepository.fail!("Malformed repository response for #{repository}: #{e.message}")
         end
 
+        # Apply additions and updates before removals, invalidating the cached snapshot afterward.
+        #
+        # repository   - String with the repository name.
+        # instructions - Array of user or team grant changes.
+        #
+        # Returns the instructions in application order.
+        Contract String, C::ArrayOf[Hash] => C::ArrayOf[Hash]
         def apply(repository, instructions)
           Configuration.validate_repository!(repository)
           instructions.partition { |instruction| instruction.fetch(:action) == :upsert }.flatten.each do |instruction|
@@ -86,7 +114,6 @@ module Entitlements
               next
             end
             login = instruction.fetch(:login)
-            Configuration.validate_login!(login)
             if organization_access.owner?(login)
               GitHubRepository.fail!("#{repository}: direct grants for owner #{login} are deferred; recalculate")
             end
@@ -102,6 +129,12 @@ module Entitlements
 
         private
 
+        # Read team grants, preserving their access sources and parent relationships.
+        #
+        # repository - String with the repository name.
+        #
+        # Returns an Array of team grant hashes.
+        Contract String => C::ArrayOf[Hash]
         def repository_teams(repository)
           teams = octokit.repository_teams("#{org}/#{repository}")
           GitHubRepository.fail!("Malformed repository teams for #{repository}") unless teams.is_a?(Array)
@@ -121,6 +154,13 @@ module Entitlements
           GitHubRepository.fail!("Reading teams for #{org}/#{repository} failed: #{e.message}")
         end
 
+        # Remove a direct team association after rechecking its identity and access source.
+        #
+        # repository  - String with the repository name.
+        # instruction - Hash containing the team ID and slug.
+        #
+        # Returns nothing.
+        Contract String, C::HashOf[Symbol => C::Any] => nil
         def remove_team(repository, instruction)
           # Removing a parent association can also remove inherited child access.
           current = Models::RepositoryAccess.new(repository: repository, roles: {}, teams: repository_teams(repository), ou: ou)
@@ -134,6 +174,13 @@ module Entitlements
           GitHubRepository.fail!("Removing team from #{org}/#{repository} failed: #{e.message}")
         end
 
+        # Read one page of collaborators and their permission sources.
+        #
+        # repository - String with the repository name.
+        # cursor     - Pagination cursor, or nil for the first page.
+        #
+        # Returns a Hash containing edges and pagination data.
+        Contract String, C::Maybe[String] => C::HashOf[String => C::Any]
         def collaborators(repository, cursor)
           query = <<~GRAPHQL
             {
@@ -161,13 +208,20 @@ module Entitlements
           connection
         end
 
+        # Validate a collaborator response and collect its direct repository role.
+        #
+        # edge   - Unvalidated collaborator edge from GitHub.
+        # roles  - Hash of user roles, updated in place.
+        # access - Organization access model used to exclude synthetic owner grants.
+        #
+        # Returns the direct role, or nil for inherited access.
+        Contract C::Any, C::HashOf[String => String], Models::OrganizationAccess => C::Maybe[String]
         def read_edge(edge, roles, access)
           unless edge.is_a?(Hash) && edge["node"].is_a?(Hash) &&
               edge["permissionSources"].is_a?(Array) && !edge["permissionSources"].empty?
             GitHubRepository.fail!("Missing or malformed repository permission sources")
           end
           login = edge.fetch("node").fetch("login")
-          Configuration.validate_login!(login)
           direct = edge.fetch("permissionSources").select do |source|
             unless source.is_a?(Hash) && source["source"].is_a?(Hash)
               GitHubRepository.fail!("Malformed repository permission source")
@@ -188,6 +242,13 @@ module Entitlements
           roles[login] = role.downcase
         end
 
+        # Apply a direct user grant change and validate the HTTP response.
+        #
+        # repository  - String with the repository name.
+        # instruction - Hash containing the action, login and optional permission.
+        #
+        # The return value is unused; failures raise a backend error.
+        Contract String, C::HashOf[Symbol => C::Any] => C::Any
         def mutate(repository, instruction)
           path = "repos/#{org}/#{repository}/collaborators/#{instruction.fetch(:login)}"
           action = instruction.fetch(:action)
@@ -220,6 +281,12 @@ module Entitlements
           GitHubRepository.fail!("#{action} #{org}/#{repository}/#{instruction.fetch(:login)} failed: #{e.message}")
         end
 
+        # Determine the GraphQL endpoint for dotcom or GitHub Enterprise.
+        #
+        # Takes no arguments.
+        #
+        # Returns the endpoint URI.
+        Contract C::None => URI::HTTP
         def graphql_uri
           @graphql_uri ||= URI.parse(octokit.api_endpoint.sub(%r{/api/v3/?\z}, "/api/").sub(%r{/?\z}, "/") + "graphql")
         end

@@ -63,6 +63,58 @@ describe Entitlements::Backend::GitHubRepository do
     stub_request(:post, endpoint).to_return(status: 200, body: JSON.generate(body))
   end
 
+  describe "method contracts" do
+    it "requires String configuration keys and a Hash of configuration data" do
+      expect { backend::Configuration.new([]) }.to raise_error(ParamContractError)
+      expect { backend::Configuration.validate!(:repos, config) }.to raise_error(ParamContractError)
+      expect { backend::Configuration.validate!("repos", []) }.to raise_error(ParamContractError)
+      expect { backend::Controller.new(:repos, config) }.to raise_error(ParamContractError)
+    end
+
+    it "requires String user logins and roles in access models" do
+      expect { access(7 => "read") }.to raise_error(ParamContractError)
+      expect { access("alice" => 7) }.to raise_error(ParamContractError)
+      expect { organization_access(membership: { 7 => "member" }) }.to raise_error(ParamContractError)
+      expect { organization_access(membership: { "alice" => 7 }) }.to raise_error(ParamContractError)
+      expect { organization_access(assignments: { "alice" => "write" }) }.to raise_error(ParamContractError)
+    end
+
+    it "requires String logins for access lookups without restricting their format" do
+      model = access("../alice" => "write")
+      expect(model.role_for("../alice")).to eq("write")
+      expect { model.role_for(nil) }.to raise_error(ParamContractError)
+      expect { model.login_for(7) }.to raise_error(ParamContractError)
+      context = organization_access
+      expect { context.owner?(nil) }.to raise_error(ParamContractError)
+      expect { context.inherited_role(7) }.to raise_error(ParamContractError)
+      expect { context.sources(:alice) }.to raise_error(ParamContractError)
+    end
+
+    it "allows omitted optional model keywords but rejects invalid supplied values" do
+      model = backend::Models::RepositoryAccess.new(repository: "app", roles: {}, ou: base)
+      expect(model.teams).to eq({})
+      expect(model.organization_access).to be_nil
+      expect { access(teams: nil) }.to raise_error(ParamContractError)
+      expect { access(organization_access: {}) }.to raise_error(ParamContractError)
+    end
+
+    it "requires typed service arguments before requesting GitHub" do
+      expect { service.read_repository(nil) }.to raise_error(ParamContractError)
+      expect { service.read_repository("app", refresh: nil) }.to raise_error(ParamContractError)
+      expect { service.organization_access(refresh: "yes") }.to raise_error(ParamContractError)
+      expect { service.apply("app", {}) }.to raise_error(ParamContractError)
+      expect { service.apply("app", ["remove"]) }.to raise_error(ParamContractError)
+    end
+
+    it "requires repository models and action objects at provider and controller boundaries" do
+      provider = backend::Provider.new(config: config)
+      expect { provider.action_for({}, "repos") }.to raise_error(ParamContractError)
+      expect { provider.action_for(access, :repos) }.to raise_error(ParamContractError)
+      expect { provider.commit({}) }.to raise_error(ParamContractError)
+      expect { backend::Controller.new("repos", config).apply({}) }.to raise_error(ParamContractError)
+    end
+  end
+
   describe "configuration validation" do
     it "registers and loads a minimal backend without requesting GitHub" do
       expect(backend::Controller.identifier).to eq("github_repository")
@@ -78,8 +130,7 @@ describe Entitlements::Backend::GitHubRepository do
     end
 
     [
-      ["features", ["invite"]], ["features", nil], ["ignore", "alice"], ["ignore", [7]],
-      ["ignore", ["../alice"]], ["org", "bad/org"], ["allowed_types", ["json"]],
+      ["features", ["invite"]], ["features", nil], ["ignore", "alice"], ["allowed_types", ["json"]],
       ["allowed_methods", ["unknown"]], ["ignore_not_found", "yes"], ["token", 1],
       ["addr", "ftp://github.test"], ["addr", "https://user:pass@github.test"],
       ["addr", "https://github.test?query=yes"], ["addr", "not a url"]
@@ -95,6 +146,11 @@ describe Entitlements::Backend::GitHubRepository do
           "ignore" => ["alice_enterprise"], "allowed_methods" => %w[username group]))
         }.not_to raise_error
       end
+    end
+
+    it "does not validate organization or ignored login formats" do
+      expect { backend::Configuration.validate!("repos", config.merge("org" => "bad/org", "ignore" => ["../alice"])) }
+        .not_to raise_error
     end
   end
 
@@ -136,16 +192,23 @@ describe Entitlements::Backend::GitHubRepository do
       end
     end
 
-    ["", ".", "..", "bad/repo", "bad repo", "a" * 101, nil].each do |name|
+    ["", ".", "..", "bad/repo", "bad repo", "a" * 101].each do |name|
       it "rejects repository name #{name.inspect}" do
         expect { access({}, repository: name) }.to raise_error(backend::Error, /repository name/)
       end
     end
 
-    it "rejects custom roles, invalid logins, and duplicate case variants" do
+    it "requires a String repository name" do
+      expect { access({}, repository: nil) }.to raise_error(ParamContractError)
+    end
+
+    it "rejects custom roles and duplicate case variants" do
       expect { access("alice" => "custom") }.to raise_error(backend::Error, /Unsupported/)
-      expect { access("../alice" => "write") }.to raise_error(backend::Error, /login/)
       expect { access("alice" => "read", "ALICE" => "write") }.to raise_error(backend::Error, /Duplicate/)
+    end
+
+    it "does not validate login formats" do
+      expect(access("../alice" => "write").role_for("../alice")).to eq("write")
     end
 
     it "tracks teams separately from users and orders parents before children" do
@@ -653,14 +716,18 @@ describe Entitlements::Backend::GitHubRepository do
         edge("alice", sources: [{ "source" => {} }]),
         edge("alice", sources: [{ "source" => { "__typename" => nil } }]),
         edge("alice", sources: []),
-        edge("alice", sources: [edge("alice")["permissionSources"].first] * 2),
-        edge("../alice")
+        edge("alice", sources: [edge("alice")["permissionSources"].first] * 2)
       ].each do |invalid|
         stub_page(page([invalid]))
         expect { service.read_repository("app") }.to raise_error(backend::Error)
       end
       stub_page(page([edge("alice"), edge("ALICE")]))
       expect { service.read_repository("app") }.to raise_error(backend::Error, /Duplicate/)
+    end
+
+    it "does not validate collaborator login formats" do
+      stub_page(page([edge("../alice")]))
+      expect(service.read_repository("app").role_for("../alice")).to eq("write")
     end
 
     it "rejects invalid or non-advancing pagination" do

@@ -6,6 +6,9 @@ require_relative "../service/github"
 module Entitlements
   class Backend
     class GitHubRepository
+      include ::Contracts::Core
+      C = ::Contracts
+
       ROLES = {
         "read" => "pull",
         "triage" => "triage",
@@ -17,6 +20,12 @@ module Entitlements
 
       class Error < RuntimeError; end
 
+      # Report an invalid configuration, response or access change.
+      #
+      # message - String describing the failure.
+      #
+      # Always raises a backend error after logging the message.
+      Contract String => C::Any
       def self.fail!(message)
         Entitlements.logger.error(message)
         raise Error, message

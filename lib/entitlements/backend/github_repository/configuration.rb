@@ -4,10 +4,18 @@ module Entitlements
   class Backend
     class GitHubRepository
       class Configuration
-        # Underscores are used by Enterprise Managed User logins.
-        LOGIN = /\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/
+        include ::Contracts::Core
+        C = ::Contracts
+
         REPOSITORY = /\A[a-zA-Z0-9_.-]{1,100}\z/
 
+        # Validate configuration options.
+        #
+        # key  - String with the name of the group.
+        # data - Hash with the configuration data.
+        #
+        # Returns nothing.
+        Contract String, C::HashOf[String => C::Any] => nil
         def self.validate!(key, data)
           spec = Entitlements::Backend::BaseController::COMMON_GROUP_CONFIG.merge(
             "dir" => { required: true, type: String },
@@ -23,13 +31,11 @@ module Entitlements
           %w[dir base org token].each do |name|
             GitHubRepository.fail!("#{key}: #{name} must not be empty") if data.fetch(name).strip.empty?
           end
-          validate_login!(data.fetch("org"))
           { "features" => FEATURES, "allowed_types" => %w[txt yaml rb],
             "allowed_methods" => Entitlements::Data::Groups::Calculated.rules_index.keys }.each do |name, allowed|
             invalid = data.fetch(name, []) - allowed
             GitHubRepository.fail!("#{key}: invalid #{name}: #{invalid.inspect}") unless invalid.empty?
           end
-          data.fetch("ignore", []).each { |login| validate_login!(login) }
           return if data["addr"].nil?
 
           uri = URI.parse(data.fetch("addr"))
@@ -40,20 +46,32 @@ module Entitlements
           GitHubRepository.fail!("#{key}: invalid addr: #{e.message}")
         end
 
-        def self.validate_login!(login)
-          GitHubRepository.fail!("Invalid GitHub login: #{login.inspect}") unless login.is_a?(String) && LOGIN.match?(login)
-        end
-
+        # Validate a repository name before using it in a path or API request.
+        #
+        # repository - Unvalidated repository name.
+        #
+        # Returns nothing. Invalid values raise a backend error.
+        Contract C::Any => nil
         def self.validate_repository!(repository)
           unless repository.is_a?(String) && REPOSITORY.match?(repository) && !%w[. ..].include?(repository)
             GitHubRepository.fail!("Invalid GitHub repository name: #{repository.inspect}")
           end
         end
 
+        # Constructor.
+        #
+        # config - Configuration provided for the controller instantiation.
+        Contract C::HashOf[String => C::Any] => C::Any
         def initialize(config)
           @config = config
         end
 
+        # Load the desired grants for every configured repository.
+        #
+        # Takes no arguments.
+        #
+        # Returns an Array of repository access models.
+        Contract C::None => C::ArrayOf[Models::RepositoryAccess]
         def load
           root = File.expand_path(@config.fetch("dir"), Entitlements.config_path)
           seen = Set.new
@@ -69,6 +87,13 @@ module Entitlements
 
         private
 
+        # Evaluate a repository's role files using the standard rules engine.
+        #
+        # repository - String with the repository name.
+        # path       - String with the absolute path to its role directory.
+        #
+        # Returns a repository access model.
+        Contract String, String => Models::RepositoryAccess
         def load_repository(repository, path)
           roles = {}
           seen_roles = Set.new
@@ -84,7 +109,6 @@ module Entitlements
             ruleset = Entitlements::Data::Groups::Calculated.ruleset(filename: filename, config: @config)
             ruleset.modified_filtered_members.each do |person|
               login = person.uid
-              self.class.validate_login!(login)
               unless seen_users.add?(login.downcase)
                 GitHubRepository.fail!("#{repository}: duplicate user across roles: #{login}")
               end
