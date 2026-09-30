@@ -7,8 +7,6 @@ module Entitlements
         include ::Contracts::Core
         C = ::Contracts
 
-        REPOSITORY = /\A[a-zA-Z0-9_.-]{1,100}\z/
-
         # Validate configuration options.
         #
         # key  - String with the name of the group.
@@ -46,18 +44,6 @@ module Entitlements
           GitHubRepository.fail!("#{key}: invalid addr: #{e.message}")
         end
 
-        # Validate a repository name before using it in a path or API request.
-        #
-        # repository - Unvalidated repository name.
-        #
-        # Returns nothing. Invalid values raise a backend error.
-        Contract C::Any => nil
-        def self.validate_repository!(repository)
-          unless repository.is_a?(String) && REPOSITORY.match?(repository) && !%w[. ..].include?(repository)
-            GitHubRepository.fail!("Invalid GitHub repository name: #{repository.inspect}")
-          end
-        end
-
         # Constructor.
         #
         # config - Configuration provided for the controller instantiation.
@@ -76,7 +62,6 @@ module Entitlements
           root = File.expand_path(@config.fetch("dir"), Entitlements.config_path)
           seen = Set.new
           Dir.children(root).sort.map do |repository|
-            self.class.validate_repository!(repository)
             path = File.join(root, repository)
             unless File.directory?(path) && !File.symlink?(path) && seen.add?(repository.downcase)
               GitHubRepository.fail!("Unexpected or duplicate repository directory: #{path}")

@@ -25,7 +25,6 @@ module Entitlements
             organization_access: C::Optional[C::Maybe[OrganizationAccess]],
           ] => C::Any
           def initialize(repository:, roles:, ou:, teams: [], organization_access: nil)
-            Configuration.validate_repository!(repository)
             @repository = repository
             @organization_access = organization_access
             @roles = {}

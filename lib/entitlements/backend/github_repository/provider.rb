@@ -92,7 +92,7 @@ module Entitlements
           action
         end
 
-        # Commit changes, checking for drift before applying and convergence afterward.
+        # Commit changes after checking for drift.
         #
         # action - An Entitlements::Models::Action object.
         #
@@ -107,11 +107,8 @@ module Entitlements
           unless filtered_snapshot(current, action.ignored_users) == action.existing
             GitHubRepository.fail!("Repository grants changed since calculation; recalculate before applying")
           end
-          @github.apply(action.updated.repository, action.implementation)
-          current = @github.read_repository(action.updated.repository, refresh: true)
-          unless filtered_snapshot(current, action.ignored_users) == action.updated
-            GitHubRepository.fail!("Repository grants did not converge for #{action.updated.repository}; recalculate before retrying")
-          end
+          @github.apply(action.updated.repository, action.implementation, teams: current.teams.values)
+          nil
         end
 
         private

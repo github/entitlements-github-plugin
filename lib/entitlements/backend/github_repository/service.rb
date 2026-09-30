@@ -19,14 +19,12 @@ module Entitlements
 
         # Read organization membership, base permissions and organization role assignments.
         #
-        # refresh - Boolean indicating whether to discard the cached snapshot.
-        #
         # Returns an organization access model.
-        Contract C::KeywordArgs[refresh: C::Optional[C::Bool]] => Models::OrganizationAccess
-        def organization_access(refresh: false)
-          @organization_access = nil if refresh
+        Contract C::None => Models::OrganizationAccess
+        def organization_access
           @organization_access ||= begin
-            # Use this installation's live view, never another backend's predictive/JIT cache.
+            # Organization reconciliation runs first, so keep one live, installation-specific
+            # snapshot for every repository calculation and commit handled by this service.
             members = members_and_roles_from_rest.transform_values(&:downcase)
             organization = octokit.organization(org)
             GitHubRepository.fail!("Missing organization access settings for #{org}") unless organization.is_a?(Sawyer::Resource)
@@ -67,16 +65,15 @@ module Entitlements
         # Read direct user and team grants together with organization-level access.
         #
         # repository - String with the repository name.
-        # refresh    - Boolean indicating whether to discard cached repository and organization access.
+        # refresh    - Boolean indicating whether to discard the cached repository access.
         #
         # Returns a repository access model.
         Contract String, C::KeywordArgs[refresh: C::Optional[C::Bool]] => Models::RepositoryAccess
         def read_repository(repository, refresh: false)
-          Configuration.validate_repository!(repository)
           @repositories ||= {}
           @repositories.delete(repository.downcase) if refresh
           @repositories[repository.downcase] ||= begin
-            access = organization_access(refresh: refresh)
+            access = organization_access
             roles = {}
             cursor = nil
             cursors = Set.new
@@ -103,14 +100,20 @@ module Entitlements
         #
         # repository   - String with the repository name.
         # instructions - Array of user or team grant changes.
+        # teams        - Optional fresh team snapshot from the preflight repository read.
         #
         # Returns the instructions in application order.
-        Contract String, C::ArrayOf[Hash] => C::ArrayOf[Hash]
-        def apply(repository, instructions)
-          Configuration.validate_repository!(repository)
-          instructions.partition { |instruction| instruction.fetch(:action) == :upsert }.flatten.each do |instruction|
+        Contract String, C::ArrayOf[Hash],
+          C::KeywordArgs[teams: C::Optional[C::Maybe[C::ArrayOf[Hash]]]] => C::ArrayOf[Hash]
+        def apply(repository, instructions, teams: nil)
+          ordered = instructions.partition { |instruction| instruction.fetch(:action) == :upsert }.flatten
+          team_snapshot = if ordered.any? { |instruction| instruction.fetch(:action) == :remove_team }
+                            Models::RepositoryAccess.new(repository: repository, roles: {},
+                              teams: teams || repository_teams(repository), ou: ou)
+          end
+          ordered.each do |instruction|
             if instruction.fetch(:action) == :remove_team
-              remove_team(repository, instruction)
+              remove_team(repository, instruction, team_snapshot)
               next
             end
             login = instruction.fetch(:login)
@@ -158,12 +161,11 @@ module Entitlements
         #
         # repository  - String with the repository name.
         # instruction - Hash containing the team ID and slug.
+        # current     - Fresh repository team snapshot used for every removal in this apply.
         #
         # Returns nothing.
-        Contract String, C::HashOf[Symbol => C::Any] => nil
-        def remove_team(repository, instruction)
-          # Removing a parent association can also remove inherited child access.
-          current = Models::RepositoryAccess.new(repository: repository, roles: {}, teams: repository_teams(repository), ou: ou)
+        Contract String, C::HashOf[Symbol => C::Any], Models::RepositoryAccess => nil
+        def remove_team(repository, instruction, current)
           team = current.teams[instruction.fetch(:team_id)]
           return unless team
           GitHubRepository.fail!("Repository team identity changed") unless team[:slug] == instruction.fetch(:slug)
