@@ -17,49 +17,18 @@ module Entitlements
           organization_access.members
         end
 
-        # Read organization membership, base permissions and organization role assignments.
+        # Read organization membership from the snapshot populated by github_org reconciliation.
         #
         # Returns an organization access model.
         Contract C::None => Models::OrganizationAccess
         def organization_access
           @organization_access ||= begin
-            # Organization reconciliation runs first, so keep one live, installation-specific
-            # snapshot for every repository calculation and commit handled by this service.
-            members = members_and_roles_from_rest.transform_values(&:downcase)
-            organization = octokit.organization(org)
-            GitHubRepository.fail!("Missing organization access settings for #{org}") unless organization.is_a?(Sawyer::Resource)
-            base_role = organization[:default_repository_permission]
-            data = octokit.get("orgs/#{org}/organization-roles")
-            unless data.is_a?(Sawyer::Resource) && data[:roles].is_a?(Array) &&
-                data[:total_count].is_a?(Integer) && data[:total_count] == data[:roles].length
-              GitHubRepository.fail!("Incomplete organization role catalog for #{org}")
-            end
-            assignments = {}
-            seen = Set.new
-            data[:roles].each do |role|
-              unless role.is_a?(Sawyer::Resource) && role[:id].is_a?(Integer) && role[:id].positive? &&
-                  seen.add?(role[:id]) && role[:name].is_a?(String) && !role[:name].empty? &&
-                  role.key?(:base_role) && (role[:base_role].nil? || ROLES.key?(role[:base_role])) &&
-                  role[:permissions].is_a?(Array) && role[:permissions].all? { |permission| permission.is_a?(String) }
-                GitHubRepository.fail!("Malformed organization role for #{org}")
-              end
-              grant = { id: role[:id], name: role[:name], base_role: role[:base_role], permissions: role[:permissions].sort.freeze }.freeze
-              users = octokit.paginate("orgs/#{org}/organization-roles/#{role[:id]}/users")
-              GitHubRepository.fail!("Malformed organization role assignments") unless users.is_a?(Array)
-              logins = Set.new
-              users.each do |user|
-                unless user.is_a?(Sawyer::Resource) && %w[direct indirect mixed].include?(user[:assignment])
-                  GitHubRepository.fail!("Malformed organization role assignee")
-                end
-                login = user[:login]
-                GitHubRepository.fail!("Duplicate organization role assignee: #{login}") unless logins.add?(login.downcase)
-                (assignments[login.downcase] ||= []) << grant
-              end
-            end
-            Models::OrganizationAccess.new(members: members, base_role: base_role, assignments: assignments)
+            # github_org runs first and seeds this shared cache. The inherited REST fallback
+            # remains available when the repository backend is run independently.
+            Models::OrganizationAccess.new(members: org_members, base_role: "none", assignments: {})
           end
         rescue Octokit::Error => e
-          GitHubRepository.fail!("Reading organization access for #{org} failed: #{e.message}")
+          GitHubRepository.fail!("Reading organization membership for #{org} failed: #{e.message}")
         end
 
         # Read direct user and team grants together with organization-level access.
@@ -75,25 +44,10 @@ module Entitlements
           @repositories[repository.downcase] ||= begin
             access = organization_access
             roles = {}
-            cursor = nil
-            cursors = Set.new
-            loop do
-              connection = collaborators(repository, cursor)
-              connection.fetch("edges").each { |edge| read_edge(edge, roles, access) }
-              page = connection.fetch("pageInfo")
-              more = page.fetch("hasNextPage")
-              GitHubRepository.fail!("Malformed repository pagination") unless [true, false].include?(more)
-              break unless more
-              cursor = page.fetch("endCursor")
-              unless cursor.is_a?(String) && !cursor.empty? && cursors.add?(cursor)
-                GitHubRepository.fail!("Missing or repeated repository pagination cursor")
-              end
-            end
+            repository_collaborators(repository).each { |collaborator| read_collaborator(collaborator, roles) }
             Models::RepositoryAccess.new(repository: repository, roles: roles, teams: repository_teams(repository),
               organization_access: access, ou: ou)
           end
-        rescue KeyError, TypeError => e
-          GitHubRepository.fail!("Malformed repository response for #{repository}: #{e.message}")
         end
 
         # Apply additions and updates before removals, invalidating the cached snapshot afterward.
@@ -176,72 +130,35 @@ module Entitlements
           GitHubRepository.fail!("Removing team from #{org}/#{repository} failed: #{e.message}")
         end
 
-        # Read one page of collaborators and their permission sources.
+        # Read every direct repository collaborator.
         #
         # repository - String with the repository name.
-        # cursor     - Pagination cursor, or nil for the first page.
         #
-        # Returns a Hash containing edges and pagination data.
-        Contract String, C::Maybe[String] => C::HashOf[String => C::Any]
-        def collaborators(repository, cursor)
-          query = <<~GRAPHQL
-            {
-              repository(owner: #{JSON.generate(org)}, name: #{JSON.generate(repository)}) {
-                collaborators(affiliation: DIRECT, first: 100, after: #{JSON.generate(cursor)}) {
-                  edges {
-                    node { login }
-                    permissionSources { roleName source { __typename } }
-                  }
-                  pageInfo { hasNextPage endCursor }
-                }
-              }
-            }
-          GRAPHQL
-          response = graphql_http_post(query)
-          unless response[:code] == 200 && response[:data].is_a?(Hash) && !response[:data].key?("errors")
-            GitHubRepository.fail!("Repository GraphQL query failed for #{org}/#{repository}: #{response.inspect}")
-          end
-          data = response[:data].fetch("data")
-          repo = data.is_a?(Hash) && data["repository"]
-          connection = repo.is_a?(Hash) && repo["collaborators"]
-          unless connection.is_a?(Hash) && connection["edges"].is_a?(Array) && connection["pageInfo"].is_a?(Hash)
-            GitHubRepository.fail!("Missing or malformed collaborator data for #{org}/#{repository}")
-          end
-          connection
+        # Returns an Array of collaborator resources.
+        Contract String => C::ArrayOf[Sawyer::Resource]
+        def repository_collaborators(repository)
+          collaborators = octokit.collaborators("#{org}/#{repository}", affiliation: "direct")
+          GitHubRepository.fail!("Malformed repository collaborators for #{repository}") unless collaborators.is_a?(Array)
+          collaborators
+        rescue Octokit::Error => e
+          GitHubRepository.fail!("Reading collaborators for #{org}/#{repository} failed: #{e.message}")
         end
 
-        # Validate a collaborator response and collect its direct repository role.
+        # Validate a direct collaborator response and collect its repository role.
         #
-        # edge   - Unvalidated collaborator edge from GitHub.
-        # roles  - Hash of user roles, updated in place.
-        # access - Organization access model used to exclude synthetic owner grants.
+        # collaborator - Unvalidated collaborator resource from GitHub.
+        # roles        - Hash of user roles, updated in place.
         #
-        # Returns the direct role, or nil for inherited access.
-        Contract C::Any, C::HashOf[String => String], Models::OrganizationAccess => C::Maybe[String]
-        def read_edge(edge, roles, access)
-          unless edge.is_a?(Hash) && edge["node"].is_a?(Hash) &&
-              edge["permissionSources"].is_a?(Array) && !edge["permissionSources"].empty?
-            GitHubRepository.fail!("Missing or malformed repository permission sources")
+        # Returns the normalized direct role.
+        Contract C::Any, C::HashOf[String => String] => String
+        def read_collaborator(collaborator, roles)
+          unless collaborator.is_a?(Sawyer::Resource) && collaborator[:login].is_a?(String) &&
+              collaborator[:role_name].is_a?(String) && ROLES.key?(collaborator[:role_name].downcase)
+            GitHubRepository.fail!("Malformed repository collaborator")
           end
-          login = edge.fetch("node").fetch("login")
-          direct = edge.fetch("permissionSources").select do |source|
-            unless source.is_a?(Hash) && source["source"].is_a?(Hash)
-              GitHubRepository.fail!("Malformed repository permission source")
-            end
-            type = source.fetch("source").fetch("__typename")
-            unless %w[Repository Team Organization EnterpriseTeam].include?(type)
-              GitHubRepository.fail!("Unknown repository permission source: #{type.inspect}")
-            end
-            type == "Repository"
-          end
-          # GitHub emits synthetic Repository admin sources for organization owners.
-          return if access.owner?(login)
-          return if direct.empty?
-          GitHubRepository.fail!("Ambiguous direct repository permissions for #{login}") unless direct.size == 1
-          role = direct.first.fetch("roleName")
-          GitHubRepository.fail!("Unsupported direct repository role for #{login}: #{role.inspect}") unless role.is_a?(String) && ROLES.key?(role.downcase)
+          login = collaborator[:login]
           GitHubRepository.fail!("Duplicate repository collaborator: #{login}") if roles.keys.any? { |key| key.casecmp?(login) }
-          roles[login] = role.downcase
+          roles[login] = collaborator[:role_name].downcase
         end
 
         # Apply a direct user grant change and validate the HTTP response.
@@ -283,15 +200,6 @@ module Entitlements
           GitHubRepository.fail!("#{action} #{org}/#{repository}/#{instruction.fetch(:login)} failed: #{e.message}")
         end
 
-        # Determine the GraphQL endpoint for dotcom or GitHub Enterprise.
-        #
-        # Takes no arguments.
-        #
-        # Returns the endpoint URI.
-        Contract C::None => URI::HTTP
-        def graphql_uri
-          @graphql_uri ||= URI.parse(octokit.api_endpoint.sub(%r{/api/v3/?\z}, "/api/").sub(%r{/?\z}, "/") + "graphql")
-        end
       end
     end
   end

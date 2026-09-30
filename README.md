@@ -135,6 +135,10 @@ Group references, filters, and expiration are evaluated by the normal Entitlemen
 
 **Custom roles are currently unsupported and organization level grants are not removed.**
 
+GitHub's REST collaborator inventory identifies direct repository associations, but reports each collaborator's highest
+effective role after inherited team, organization, and enterprise access. A stronger inherited role can therefore mask a
+lower direct role during calculation; the backend reconciles the effective role returned by GitHub.
+
 **A missing role file means no desired members for that role and an empty repository directory would request the removal of all managed direct user and team grants.**
 
 To opt-out a repository, its entire directory must be removed.
