@@ -22,15 +22,10 @@ module Entitlements
             assignments: C::HashOf[String => C::ArrayOf[Hash]],
           ] => C::Any
           def initialize(members:, base_role:, assignments:)
-            unless (ROLES.keys + ["none"]).include?(base_role) &&
-                members.values.all? { |role| %w[member admin].include?(role) }
-              GitHubRepository.fail!("Malformed organization access")
-            end
+            validate_access!(members, base_role)
             @members = members.transform_keys(&:downcase).freeze
             @base_role = base_role
-            @assignments = assignments.transform_keys(&:downcase).transform_values do |roles|
-              roles.sort_by { |role| role.fetch(:id) }.freeze
-            end.freeze
+            @assignments = normalize_assignments(assignments)
           end
 
           # Determine whether a user owns the organization.
@@ -51,10 +46,8 @@ module Entitlements
           Contract String => C::Maybe[String]
           def inherited_role(login)
             return unless members.key?(login.downcase)
-            roles = assignments.fetch(login.downcase, []).filter_map { |assignment| assignment[:base_role] }
-            roles << base_role unless base_role == "none"
-            roles << "admin" if owner?(login)
-            roles.max_by { |role| ROLES.keys.index(role) }
+
+            inherited_roles(login).max_by { |role| ROLES.keys.index(role) }
           end
 
           # Describe the organization grants contributing to a user's access.
@@ -78,6 +71,33 @@ module Entitlements
           Contract C::Any => C::Bool
           def ==(other)
             other.is_a?(self.class) && members == other.members && base_role == other.base_role && assignments == other.assignments
+          end
+
+          private
+
+          # Validate organization membership and base access.
+          Contract C::HashOf[String => String], C::Maybe[String] => nil
+          def validate_access!(members, base_role)
+            valid_base_role = (ROLES.keys + ["none"]).include?(base_role)
+            valid_members = members.values.all? { |role| %w[member admin].include?(role) }
+            GitHubRepository.fail!("Malformed organization access") unless valid_base_role && valid_members
+          end
+
+          # Normalize organization role assignments for stable comparisons.
+          Contract C::HashOf[String => C::ArrayOf[Hash]] => C::HashOf[String => C::ArrayOf[Hash]]
+          def normalize_assignments(assignments)
+            assignments.transform_keys(&:downcase).transform_values do |roles|
+              roles.sort_by { |role| role.fetch(:id) }.freeze
+            end.freeze
+          end
+
+          # Collect every organization-level role inherited by a member.
+          Contract String => C::ArrayOf[String]
+          def inherited_roles(login)
+            roles = assignments.fetch(login.downcase, []).filter_map { |assignment| assignment[:base_role] }
+            roles << base_role unless base_role == "none"
+            roles << "admin" if owner?(login)
+            roles
           end
         end
       end

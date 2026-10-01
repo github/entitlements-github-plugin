@@ -87,14 +87,14 @@ describe Entitlements::Backend::GitHubRepository do
     it "requires typed service arguments before requesting GitHub" do
       expect { service.read_repository(nil) }.to raise_error(ParamContractError)
       expect { service.read_repository("app", refresh: nil) }.to raise_error(ParamContractError)
-      expect { service.apply("app", {}) }.to raise_error(ParamContractError)
-      expect { service.apply("app", ["remove"]) }.to raise_error(ParamContractError)
+      expect { service.apply_instructions("app", {}) }.to raise_error(ParamContractError)
+      expect { service.apply_instructions("app", ["remove"]) }.to raise_error(ParamContractError)
     end
 
     it "requires repository models and action objects at provider and controller boundaries" do
       provider = backend::Provider.new(config: config)
-      expect { provider.action_for({}, "repos") }.to raise_error(ParamContractError)
-      expect { provider.action_for(access, :repos) }.to raise_error(ParamContractError)
+      expect { provider.build_action({}, "repos") }.to raise_error(ParamContractError)
+      expect { provider.build_action(access, :repos) }.to raise_error(ParamContractError)
       expect { provider.commit({}) }.to raise_error(ParamContractError)
       expect { backend::Controller.new("repos", config).apply({}) }.to raise_error(ParamContractError)
     end
@@ -148,9 +148,9 @@ describe Entitlements::Backend::GitHubRepository do
       expect(model.member?("bOB")).to be(true)
       expect(model.member_strings).to eq(Set.new(%w[Bob ALIce]))
       expect(model).to eq(access({ "alice" => "read", "bob" => "maintain" }, repository: "APP"))
-      expect(model.equals?(access("alice" => "write", "bob" => "maintain"))).to be(false)
-      expect(model.equals?(access({ "alice" => "read", "bob" => "maintain" }, repository: "other"))).to be(false)
-      expect(model.equals?(:none)).to be(false)
+      expect(model == access("alice" => "write", "bob" => "maintain")).to be(false)
+      expect(model == access({ "alice" => "read", "bob" => "maintain" }, repository: "other")).to be(false)
+      expect(model == :none).to be(false)
     end
 
     describe "organization access model" do
@@ -300,7 +300,7 @@ describe Entitlements::Backend::GitHubRepository do
       it "honors feature combination #{features.inspect} in instructions and displayed state" do
         config["features"] = features
         allow(service).to receive(:read_repository).with("app").and_return(access({ "alice" => "read", "bob" => "write" }, teams: [team]))
-        action = provider.action_for(access("ALICE" => "admin", "carol" => "triage"), "repos")
+        action = provider.build_action(access("ALICE" => "admin", "carol" => "triage"), "repos")
         if features.empty?
           expect(action).to be_nil
         else
@@ -315,7 +315,7 @@ describe Entitlements::Backend::GitHubRepository do
           effective["bob"] = "write" unless features.include?("remove")
           expect(action.updated.roles).to eq(effective)
           expect(action.updated.teams.empty?).to eq(features.include?("remove"))
-          expect(action.existing.equals?(action.updated)).to be(false)
+          expect(action.existing == action.updated).to be(false)
         end
       end
     end
@@ -323,19 +323,19 @@ describe Entitlements::Backend::GitHubRepository do
     it "ignores configured users on both sides and handles case-only changes as no-op" do
       config["ignore"] = ["OWNER", "Bob"]
       allow(service).to receive(:read_repository).and_return(access("alice" => "read", "bob" => "admin"))
-      expect(provider.action_for(access("ALICE" => "read", "owner" => "write"), "repos")).to be_nil
+      expect(provider.build_action(access("ALICE" => "read", "owner" => "write"), "repos")).to be_nil
     end
 
     it "rejects desired non-members before reading a repository" do
       expect(service).not_to receive(:read_repository)
-      expect { provider.action_for(access("outsider" => "read"), "repos") }.to raise_error(backend::Error, /not active/)
+      expect { provider.build_action(access("outsider" => "read"), "repos") }.to raise_error(backend::Error, /not active/)
     end
 
     it "warns and ignores non-members when explicitly configured" do
       config["ignore_not_found"] = true
       expect(logger).to receive(:warn).with(/outsider.*ignored/)
       allow(service).to receive(:read_repository).and_return(access)
-      expect(provider.action_for(access("outsider" => "read"), "repos")).to be_nil
+      expect(provider.build_action(access("outsider" => "read"), "repos")).to be_nil
     end
 
     it "validates all files before API requests, calculates and applies one action per repository" do
@@ -347,7 +347,7 @@ describe Entitlements::Backend::GitHubRepository do
       actions = controller.calculate
       expect(actions.size).to eq(1)
       expect(controller.change_count).to eq(1)
-      expect(service).to receive(:apply)
+      expect(service).to receive(:apply_instructions)
         .with("app", [{ action: :upsert, login: "alice", permission: "maintain" }], teams: [])
       controller.apply(actions.first)
       allow(loader).to receive(:load).and_raise(backend::Error, "invalid file")
@@ -370,7 +370,7 @@ describe Entitlements::Backend::GitHubRepository do
     it "rejects observed state without organization access metadata" do
       missing = backend::Models::RepositoryAccess.new(repository: "app", roles: {}, ou: base)
       allow(service).to receive(:read_repository).and_return(missing)
-      expect { provider.action_for(access, "repos") }.to raise_error(backend::Error, /Missing organization access snapshot/)
+      expect { provider.build_action(access, "repos") }.to raise_error(backend::Error, /Missing organization access snapshot/)
     end
 
     it "calculates and counts team-only actions without pretending teams are users" do
@@ -390,34 +390,34 @@ describe Entitlements::Backend::GitHubRepository do
       config["features"] = %w[add update]
       allow(service).to receive(:read_repository).and_return(access(teams: [team]))
       expect(logger).to receive(:warn).with(/individual-only.*not enforced/)
-      action = provider.action_for(access("alice" => "read"), "repos")
+      action = provider.build_action(access("alice" => "read"), "repos")
       expect(action.updated.teams).to eq(action.existing.teams)
       expect(action.implementation.map { |instruction| instruction[:action] }).to eq([:upsert])
     end
 
     it "removes undeclared outside direct grants as well as all direct teams" do
       allow(service).to receive(:read_repository).and_return(access("outsider" => "read", :teams => [team]))
-      action = provider.action_for(access("alice" => "read"), "repos")
+      action = provider.build_action(access("alice" => "read"), "repos")
       expect(action.implementation.map { |instruction| instruction[:action] }).to eq([:upsert, :remove, :remove_team])
       expect(action.updated.roles).to eq("alice" => "read")
     end
 
     it "rejects stale plans before mutation and applies against the preflight team snapshot" do
       allow(service).to receive(:read_repository).and_return(access(teams: [team]))
-      action = provider.action_for(access, "repos")
+      action = provider.build_action(access, "repos")
       allow(service).to receive(:read_repository).with("app", refresh: true).and_return(access)
-      expect(service).not_to receive(:apply)
+      expect(service).not_to receive(:apply_instructions)
       expect { provider.commit(action) }.to raise_error(backend::Error, /changed since calculation/)
       RSpec::Mocks.space.proxy_for(service).reset
       allow(service).to receive(:read_repository).with("app", refresh: true).and_return(action.existing)
-      expect(service).to receive(:apply).with("app", action.implementation, teams: action.existing.teams.values)
+      expect(service).to receive(:apply_instructions).with("app", action.implementation, teams: action.existing.teams.values)
       provider.commit(action)
     end
 
     it "accepts desired owners without ignore_not_found and defers their ambiguous direct grants" do
       allow(service).to receive(:read_repository).and_return(access(teams: [team], organization_access: organization_access))
       expect(logger).to receive(:warn).with(/DEFER app: owner.*inherited admin.*organization ownership/)
-      action = provider.action_for(access("owner" => "read"), "repos")
+      action = provider.build_action(access("owner" => "read"), "repos")
       expect(action.implementation).to eq([{ action: :remove_team, team_id: 1, slug: "engineering" }])
       expect(action.ignored_users).to be_empty
     end
@@ -426,7 +426,7 @@ describe Entitlements::Backend::GitHubRepository do
       it "handles all-repository #{role} assignments and provisions equal direct grants" do
         inherited = organization_access(assignments: { "alice" => [organization_role(10, role, "arbitrary-#{role}")] })
         allow(service).to receive(:read_repository).and_return(access(organization_access: inherited))
-        action = provider.action_for(access("alice" => role), "repos")
+        action = provider.build_action(access("alice" => role), "repos")
         expect(action.implementation).to eq([{ action: :upsert, login: "alice", permission: backend::ROLES.fetch(role) }])
       end
     end
@@ -436,7 +436,7 @@ describe Entitlements::Backend::GitHubRepository do
       current = access({ "alice" => "admin" }, teams: [team], organization_access: inherited)
       allow(service).to receive(:read_repository).and_return(current)
       expect(logger).to receive(:warn).with(/DEFER app: alice direct role read; inherited write/)
-      action = provider.action_for(access("alice" => "read"), "repos")
+      action = provider.build_action(access("alice" => "read"), "repos")
       expect(action.updated.roles).to eq("alice" => "admin")
       expect(action.implementation.map { |entry| entry[:action] }).to eq([:remove_team])
     end
@@ -444,21 +444,21 @@ describe Entitlements::Backend::GitHubRepository do
     it "defers roles below organization base and continues to provision users above the base" do
       allow(service).to receive(:read_repository).and_return(access(organization_access: organization_access(base_role: "write")))
       expect(logger).to receive(:warn).with(/DEFER app: alice.*organization base write/)
-      action = provider.action_for(access("alice" => "read", "bob" => "admin"), "repos")
+      action = provider.build_action(access("alice" => "read", "bob" => "admin"), "repos")
       expect(action.updated.roles).to eq("bob" => "admin")
     end
 
     it "removes undeclared direct grants even when a non-owner retains organization-wide access" do
       inherited = organization_access(assignments: { "alice" => [organization_role] })
       allow(service).to receive(:read_repository).and_return(access({ "alice" => "admin" }, organization_access: inherited))
-      action = provider.action_for(access, "repos")
+      action = provider.build_action(access, "repos")
       expect(action.implementation).to eq([{ action: :remove, login: "alice" }])
     end
 
     it "preserves organization and enterprise team sources while removing a direct association" do
       teams = [team, team(2, "security", nil, "organization"), team(3, "enterprise", nil, "enterprise")]
       allow(service).to receive(:read_repository).and_return(access(teams: teams, organization_access: organization_access))
-      action = provider.action_for(access, "repos")
+      action = provider.build_action(access, "repos")
       expect(action.implementation).to eq([{ action: :remove_team, team_id: 1, slug: "engineering" }])
       expect(action.updated.teams.keys).to eq([2, 3])
       # A direct association can mask an organization-wide source for the same team.
@@ -469,7 +469,7 @@ describe Entitlements::Backend::GitHubRepository do
     it "plans a direct grant from the organization snapshot after owner JIT expires" do
       demoted = organization_access(membership: members.merge("owner" => "member"))
       allow(service).to receive(:read_repository).and_return(access(organization_access: demoted))
-      action = provider.action_for(access("owner" => "read"), "repos")
+      action = provider.build_action(access("owner" => "read"), "repos")
       expect(action.implementation).to eq([{ action: :upsert, login: "owner", permission: "pull" }])
     end
   end
@@ -555,7 +555,7 @@ describe Entitlements::Backend::GitHubRepository do
 
     it "rejects owner mutations even if an invalid instruction bypassed the planner" do
       [:upsert, :remove].each do |action|
-        expect { service.apply("app", [{ action: action, login: "owner", permission: "pull" }]) }
+        expect { service.apply_instructions("app", [{ action: action, login: "owner", permission: "pull" }]) }
           .to raise_error(backend::Error, /owner.*deferred/)
       end
       expect(a_request(:put, /collaborators/)).not_to have_been_made
@@ -580,7 +580,7 @@ describe Entitlements::Backend::GitHubRepository do
 
     it "refuses to delete a team whose source became organization-wide" do
       stub_teams([{ id: 1, slug: "team", parent: nil, access_source: "organization" }])
-      expect { service.apply("app", [{ action: :remove_team, team_id: 1, slug: "team" }]) }
+      expect { service.apply_instructions("app", [{ action: :remove_team, team_id: 1, slug: "team" }]) }
         .to raise_error(backend::Error, /access source changed/)
       expect(a_request(:delete, /teams/)).not_to have_been_made
     end
@@ -639,7 +639,7 @@ describe Entitlements::Backend::GitHubRepository do
       it "upserts #{role} with REST #{permission} in exactly one PUT" do
         request = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
           .with(body: { permission: permission }).to_return(status: 204)
-        service.apply("app", [{ action: :upsert, login: "alice", permission: permission }])
+        service.apply_instructions("app", [{ action: :upsert, login: "alice", permission: permission }])
         expect(request).to have_been_requested.once
       end
     end
@@ -656,7 +656,7 @@ describe Entitlements::Backend::GitHubRepository do
         order << :delete
         { status: 204 }
       end
-      service.apply("app", [{ action: :remove, login: "alice" }, { action: :upsert, login: "bob", permission: "push" }])
+      service.apply_instructions("app", [{ action: :remove, login: "alice" }, { action: :upsert, login: "bob", permission: "push" }])
       expect(order).to eq([:put, :delete])
       stub_collaborators([collaborator("bob")])
       expect(service.read_repository("app").roles).to eq("bob" => "write")
@@ -666,18 +666,18 @@ describe Entitlements::Backend::GitHubRepository do
       stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
         .to_return(status: 201, body: '{"id":1}', headers: { "Content-Type" => "application/json" })
       expect(logger).to receive(:warn).with(/invitation created.*not yet active/)
-      service.apply("app", [{ action: :upsert, login: "alice", permission: "pull" }])
+      service.apply_instructions("app", [{ action: :upsert, login: "alice", permission: "pull" }])
     end
 
     it "rejects malformed invitation responses and unexpected deletion responses" do
       ["null", "{}", '{"id":0}', '{"id":"1"}'].each do |body|
         stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
           .to_return(status: 201, body: body, headers: { "Content-Type" => "application/json" })
-        expect { service.apply("app", [{ action: :upsert, login: "alice", permission: "pull" }]) }
+        expect { service.apply_instructions("app", [{ action: :upsert, login: "alice", permission: "pull" }]) }
           .to raise_error(backend::Error, /Malformed repository invitation/)
       end
       stub_request(:delete, "https://api.github.com/repos/example/app/collaborators/alice").to_return(status: 201)
-      expect { service.apply("app", [{ action: :remove, login: "alice" }]) }
+      expect { service.apply_instructions("app", [{ action: :remove, login: "alice" }]) }
         .to raise_error(backend::Error, /Unexpected repository mutation/)
     end
 
@@ -685,7 +685,7 @@ describe Entitlements::Backend::GitHubRepository do
       it "surfaces REST HTTP #{status} without retry" do
         request = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
           .to_return(status: status, body: '{"message":"denied"}', headers: { "Content-Type" => "application/json" })
-        expect { service.apply("app", [{ action: :upsert, login: "alice", permission: "push" }]) }.to raise_error(backend::Error)
+        expect { service.apply_instructions("app", [{ action: :upsert, login: "alice", permission: "push" }]) }.to raise_error(backend::Error)
         expect(request).to have_been_requested.once
       end
     end
@@ -693,7 +693,7 @@ describe Entitlements::Backend::GitHubRepository do
     it "retries server failures on idempotent REST mutations" do
       request = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
         .to_return({ status: 502 }, { status: 204 })
-      service.apply("app", [{ action: :upsert, login: "alice", permission: "push" }])
+      service.apply_instructions("app", [{ action: :upsert, login: "alice", permission: "push" }])
       expect(request).to have_been_requested.twice
     end
 
@@ -704,7 +704,7 @@ describe Entitlements::Backend::GitHubRepository do
       failed = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/bob").to_return(status: 500)
       instructions = [{ action: :upsert, login: "alice", permission: "push" },
         { action: :upsert, login: "bob", permission: "push" }, { action: :remove, login: "carol" }]
-      expect { service.apply("app", instructions) }.to raise_error(backend::Error)
+      expect { service.apply_instructions("app", instructions) }.to raise_error(backend::Error)
       expect(failed).to have_been_requested.times(3)
       expect(a_request(:delete, /collaborators/)).not_to have_been_made
       stub_collaborators([collaborator("alice"), collaborator("carol")])
@@ -717,7 +717,7 @@ describe Entitlements::Backend::GitHubRepository do
         { action: :upsert, login: "alice", permission: "custom" },
         { action: :upsert, login: "outsider", permission: "pull" }
       ].each do |instruction|
-        expect { service.apply("app", [instruction]) }.to raise_error(backend::Error)
+        expect { service.apply_instructions("app", [instruction]) }.to raise_error(backend::Error)
       end
     end
 
@@ -730,7 +730,7 @@ describe Entitlements::Backend::GitHubRepository do
         endpoint: "https://github.test/api/v3/repos/example/app/collaborators")
       expect(enterprise.read_repository("app").role_for("alice")).to eq("write")
       request = stub_request(:delete, "https://github.test/api/v3/repos/example/app/collaborators/alice").to_return(status: 204)
-      enterprise.apply("app", [{ action: :remove, login: "alice" }])
+      enterprise.apply_instructions("app", [{ action: :remove, login: "alice" }])
       expect(request).to have_been_requested.once
     end
 
@@ -780,7 +780,7 @@ describe Entitlements::Backend::GitHubRepository do
         { status: 204 }
       end
       instructions = entries.map { |entry| { action: :remove_team, team_id: entry[:id], slug: entry[:slug] } }
-      service.apply("app", instructions + [{ action: :upsert, login: "alice", permission: "pull" }])
+      service.apply_instructions("app", instructions + [{ action: :upsert, login: "alice", permission: "pull" }])
       expect(order).to eq([:user, :parent, :child, :inherited])
       expect(teams_request).to have_been_requested.once
     end
@@ -790,9 +790,9 @@ describe Entitlements::Backend::GitHubRepository do
       instruction = { action: :remove_team, team_id: 1, slug: "engineering" }
       [403, 200].each do |status|
         stub_request(:delete, "https://api.github.com/orgs/example/teams/engineering/repos/example/app").to_return(status: status)
-        expect { service.apply("app", [instruction]) }.to raise_error(backend::Error)
+        expect { service.apply_instructions("app", [instruction]) }.to raise_error(backend::Error)
       end
-      expect { service.apply("app", [instruction.merge(slug: "renamed")]) }.to raise_error(backend::Error, /identity changed/)
+      expect { service.apply_instructions("app", [instruction.merge(slug: "renamed")]) }.to raise_error(backend::Error, /identity changed/)
     end
   end
 end

@@ -27,32 +27,8 @@ module Entitlements
           def initialize(repository:, roles:, ou:, teams: [], organization_access: nil)
             @repository = repository
             @organization_access = organization_access
-            @roles = {}
-            @logins = {}
-            roles.sort_by { |login, _| login.downcase }.each do |login, role|
-              GitHubRepository.fail!("Unsupported repository role: #{role.inspect}") unless ROLES.key?(role)
-              key = login.downcase
-              GitHubRepository.fail!("Duplicate repository user: #{login}") if @roles.key?(key)
-              @roles[key] = role
-              @logins[key] = login
-            end
-            @roles.freeze
-            @logins.freeze
-            @teams = {}
-            slugs = Set.new
-            teams.each do |team|
-              unless team.is_a?(Hash) && team[:id].is_a?(Integer) && team[:id].positive? &&
-                  team[:slug].is_a?(String) && /\A[a-zA-Z0-9_-]+\z/.match?(team[:slug]) &&
-                  %w[direct organization enterprise].include?(team[:access_source]) &&
-                  (team[:parent_id].nil? || (team[:parent_id].is_a?(Integer) && team[:parent_id].positive?))
-                GitHubRepository.fail!("Malformed repository team: #{team.inspect}")
-              end
-              if @teams.key?(team[:id]) || !slugs.add?(team[:slug].downcase)
-                GitHubRepository.fail!("Duplicate repository team: #{team[:slug]}")
-              end
-              @teams[team[:id]] = team.dup.freeze
-            end
-            @teams.freeze
+            @roles, @logins = normalize_roles(roles)
+            @teams = normalize_teams(teams)
             ordered_teams
             super(dn: "cn=#{repository},#{ou}", members: Set.new(@logins.values))
           end
@@ -67,7 +43,7 @@ module Entitlements
             remaining = direct_teams.dup
             ordered = []
             until remaining.empty?
-              roots = remaining.values.reject { |team| remaining.key?(team[:parent_id]) }.sort_by { |team| team[:slug].downcase }
+              roots = root_teams(remaining)
               GitHubRepository.fail!("Cyclic repository team hierarchy") if roots.empty?
               roots.each { |team| ordered << remaining.delete(team[:id]) }
             end
@@ -110,12 +86,76 @@ module Entitlements
           #
           # Returns true if the effective snapshots match.
           Contract C::Any => C::Bool
-          def equals?(other)
+          def ==(other)
             other.is_a?(self.class) && dn.casecmp?(other.dn) && roles == other.roles &&
               direct_teams == other.direct_teams && organization_access == other.organization_access
           end
 
-          alias_method :==, :equals?
+          private
+
+          # Normalize user roles and retain the original login spelling.
+          Contract C::HashOf[String => String] => C::ArrayOf[Hash]
+          def normalize_roles(roles)
+            normalized_roles = {}
+            logins = {}
+            roles.sort_by { |login, _| login.downcase }.each do |login, role|
+              GitHubRepository.fail!("Unsupported repository role: #{role.inspect}") unless ROLES.key?(role)
+              key = login.downcase
+              GitHubRepository.fail!("Duplicate repository user: #{login}") if normalized_roles.key?(key)
+              normalized_roles[key] = role
+              logins[key] = login
+            end
+            [normalized_roles.freeze, logins.freeze]
+          end
+
+          # Normalize and validate team grants for stable comparisons.
+          Contract C::ArrayOf[Hash] => C::HashOf[Integer => Hash]
+          def normalize_teams(teams)
+            normalized = {}
+            slugs = Set.new
+            teams.each do |team|
+              validate_team!(team)
+              if normalized.key?(team[:id]) || !slugs.add?(team[:slug].downcase)
+                GitHubRepository.fail!("Duplicate repository team: #{team[:slug]}")
+              end
+              normalized[team[:id]] = team.dup.freeze
+            end
+            normalized.freeze
+          end
+
+          # Validate a repository team grant.
+          Contract C::Any => nil
+          def validate_team!(team)
+            valid = team.is_a?(Hash) && valid_team_identity?(team) &&
+              valid_parent_id?(team[:parent_id]) && valid_access_source?(team[:access_source])
+            GitHubRepository.fail!("Malformed repository team: #{team.inspect}") unless valid
+          end
+
+          # Select parentless teams relative to the remaining direct grants.
+          Contract C::HashOf[Integer => Hash] => C::ArrayOf[Hash]
+          def root_teams(remaining)
+            remaining.values.reject { |team| remaining.key?(team[:parent_id]) }
+              .sort_by { |team| team[:slug].downcase }
+          end
+
+          # Validate a team ID and slug.
+          Contract Hash => C::Bool
+          def valid_team_identity?(team)
+            team[:id].is_a?(Integer) && team[:id].positive? &&
+              team[:slug].is_a?(String) && /\A[a-zA-Z0-9_-]+\z/.match?(team[:slug])
+          end
+
+          # Validate an optional parent team ID.
+          Contract C::Any => C::Bool
+          def valid_parent_id?(parent_id)
+            parent_id.nil? || (parent_id.is_a?(Integer) && parent_id.positive?)
+          end
+
+          # Validate a team access source.
+          Contract C::Any => C::Bool
+          def valid_access_source?(source)
+            %w[direct organization enterprise].include?(source)
+          end
         end
       end
     end
