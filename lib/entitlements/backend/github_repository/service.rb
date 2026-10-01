@@ -59,7 +59,7 @@ module Entitlements
         # Returns the instructions in application order.
         Contract String, C::ArrayOf[Hash],
           C::KeywordArgs[teams: C::Optional[C::Maybe[C::ArrayOf[Hash]]]] => C::ArrayOf[Hash]
-        def apply_instructions(repository, instructions, teams: nil)
+        def sync_repository(repository, instructions, teams: nil)
           ordered = order_instructions(instructions)
           team_snapshot = team_snapshot(repository, ordered, teams)
           ordered.each { |instruction| apply_instruction(repository, instruction, team_snapshot) }

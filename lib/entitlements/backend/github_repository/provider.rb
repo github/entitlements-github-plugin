@@ -19,6 +19,16 @@ module Entitlements
             ou: config.fetch("base"), addr: config["addr"])
         end
 
+        # Read current access for the desired repository.
+        #
+        # desired - Repository access model containing the repository identity.
+        #
+        # Returns the current repository access model.
+        Contract Models::RepositoryAccess => Models::RepositoryAccess
+        def read(desired)
+          @github.read_repository(desired.repository)
+        end
+
         # Calculate direct grant changes without modifying inherited access.
         #
         # desired    - Repository access model containing the desired user roles.
@@ -26,10 +36,10 @@ module Entitlements
         #
         # Returns an action, or nil if no enabled changes are needed.
         Contract Models::RepositoryAccess, String => C::Maybe[Entitlements::Models::Action]
-        def build_action(desired, group_name)
+        def diff(desired, group_name)
           ignored = ignored_logins
           validate_members(desired, ignored)
-          existing = @github.read_repository(desired.repository)
+          existing = read(desired)
           access = organization_access(existing)
           current = managed_roles(existing, ignored)
           target = managed_roles(desired, ignored)
@@ -55,7 +65,7 @@ module Entitlements
           unless filtered_snapshot(current, action.ignored_users) == action.existing
             GitHubRepository.fail!("Repository grants changed since calculation; recalculate before applying")
           end
-          @github.apply_instructions(action.updated.repository, action.implementation, teams: current.teams.values)
+          @github.sync_repository(action.updated.repository, action.implementation, teams: current.teams.values)
           nil
         end
 

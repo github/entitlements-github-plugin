@@ -54,7 +54,7 @@ module Entitlements
         def calculate
           # Evaluate every local file before making the first GitHub request.
           validate
-          @actions = @repositories.filter_map { |repository| @provider.build_action(repository, group_name) }
+          @actions = @repositories.filter_map { |repository| @provider.diff(repository, group_name) }
         end
 
         # Apply changes.
