@@ -2,7 +2,7 @@
 
 [![acceptance](https://github.com/github/entitlements-github-plugin/actions/workflows/acceptance.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/acceptance.yml) [![test](https://github.com/github/entitlements-github-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/test.yml) [![lint](https://github.com/github/entitlements-github-plugin/actions/workflows/lint.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/lint.yml) [![release](https://github.com/github/entitlements-github-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/release.yml) [![build](https://github.com/github/entitlements-github-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/github/entitlements-github-plugin/actions/workflows/build.yml) [![coverage](https://img.shields.io/badge/coverage-100%25-success)](https://img.shields.io/badge/coverage-100%25-success) [![style](https://img.shields.io/badge/code%20style-rubocop--github-blue)](https://github.com/github/rubocop-github)
 
-`entitlements-github-plugin` is an [entitlements-app](https://github.com/github/entitlements-app) plugin allowing entitlements configs to be used to manage membership of GitHub.com Organizations and Teams.
+`entitlements-github-plugin` is an [entitlements-app](https://github.com/github/entitlements-app) plugin allowing entitlements configs to manage GitHub organization and team membership, and direct repository access.
 
 ## Usage
 
@@ -38,6 +38,7 @@ require "entitlements"
 # require entitlements plugins here
 require "entitlements/backend/github_org"
 require "entitlements/backend/github_team"
+require "entitlements/backend/github_repository"
 require "entitlements/service/github"
 ```
 
@@ -84,6 +85,63 @@ For example, if there were a file `github.com/github/teams/new-team.txt` with a 
 Entitlements configs can contain metadata which the plugin will use to make further configuration decisions.
 
 `metadata_parent_team_name` - when defined in an entitlements config, the defined team will be made the parent team of this GitHub.com Team.
+
+### GitHub repositories
+
+The `github_repository` backend manages repository level grants for **individuals only**. Role files define the desired grants and all other direct access is removed when the `remove` option is enabled. Users must be active organization members. 
+
+Load `entitlements/backend/github_repository` in your plugin loader and add this entry under `groups`:
+
+```yaml
+github.com/github/repositories:
+  type: github_repository
+  dir: repositories/github
+  base: ou=repositories,ou=github,ou=GitHub,dc=github,dc=com
+  org: github
+  token: <%= ENV.fetch("GITHUB_REPOSITORY_TOKEN") %>
+  addr: <%= ENV["GITHUB_API_BASE"] %>
+  allowed_types: [txt]
+  allowed_methods: [username, group]
+  features: [add, update, remove]
+  ignore: []
+  ignore_not_found: false
+```
+
+`dir`, `base`, `org`, and `token` are required, nonempty strings.
+
+#### Repository and role files
+
+Each immediate subdirectory opts one repository into management:
+
+```text
+repositories/github/
+  entitlements-app/
+    read.txt
+    write.txt
+    maintain.txt
+  another.repository/
+    admin.txt
+```
+
+Role files use standard Entitlements syntax:
+
+```text
+username = alice
+username = bob; expiration = 2027-01-01
+group = engineering/platform
+```
+
+Group references, filters, and expiration are evaluated by the normal Entitlements rules engine. Group references expand to individual users, never GitHub team grants. 
+
+**Custom roles are currently unsupported and organization level grants are not removed.**
+
+GitHub's REST collaborator inventory identifies direct repository associations, but reports each collaborator's highest
+effective role after inherited team, organization, and enterprise access. A stronger inherited role can therefore mask a
+lower direct role during calculation; the backend reconciles the effective role returned by GitHub.
+
+**A missing role file means no desired members for that role and an empty repository directory would request the removal of all managed direct user and team grants.**
+
+To opt-out a repository, its entire directory must be removed.
 
 ## Release 🚀
 

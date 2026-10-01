@@ -42,6 +42,7 @@ require "entitlements"
 
 require_relative "../../lib/entitlements/backend/github_org"
 require_relative "../../lib/entitlements/backend/github_team"
+require_relative "../../lib/entitlements/backend/github_repository"
 require_relative "../../lib/entitlements/service/github"
 
 def fixture(path)
