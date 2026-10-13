@@ -406,6 +406,7 @@ module Entitlements
         rescue Net::ReadTimeout => e
           # Defend against network blips, those can be safely retried via the
           # synthesized 500 below, so log at WARN.
+          reset_graphql_http
           Entitlements.logger.warn "#{e.class} #{e.message}"
           { code: 500, data: nil }
         rescue JSON::ParserError => e

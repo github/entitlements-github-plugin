@@ -340,9 +340,9 @@ describe Entitlements::Service::GitHub do
       expect(replacement_http).to receive(:start)
       expect(replacement_http).to receive(:request).and_return(response)
       expect_any_instance_of(Object).to receive(:sleep).with(1).once
-      expect(logger).to receive(:error).
-        with("Caught Net::ReadTimeout POSTing to https://github.fake/api/v3/graphql: Net::ReadTimeout with \"execution expired\"")
-      expect(logger).to receive(:warn).
+      expect(logger).to receive(:warn).ordered.
+        with("Net::ReadTimeout Net::ReadTimeout with \"execution expired\"")
+      expect(logger).to receive(:warn).ordered.
         with("GraphQL failed on try 1 of 3. Will retry.")
 
       expect(subject.send(:graphql_http_post, query)).to eq(code: 200, data: answer)
