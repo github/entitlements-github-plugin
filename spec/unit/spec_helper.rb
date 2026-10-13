@@ -59,15 +59,19 @@ end
 def graphql_response(team, slice_start, slice_length, parent_team: nil)
   team_id = rand(1..10000)
   edges = team.member_strings.sort.to_a.slice(slice_start, slice_length).map do |m|
-    { "node" => { "login" => m }, "role" => "MEMBER", "cursor" => Base64.encode64(m) }
+    { "node" => { "login" => m }, "role" => "MEMBER" }
   end
+  end_cursor = edges.empty? ? nil : Base64.encode64(edges.last.fetch("node").fetch("login"))
   struct = {
     "data" => {
       "organization" => {
         "team" => {
           "databaseId" => team_id,
           "members" => {
-            "edges" => edges
+            "edges" => edges,
+            "pageInfo" => {
+              "endCursor" => end_cursor
+            }
           },
           "parentTeam" => {
             "slug" => parent_team
