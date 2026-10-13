@@ -450,6 +450,14 @@ describe Entitlements::Service::GitHub do
       expect(response).to eq(code: 200, data: answer)
     end
 
+    it "logs at warn and returns a retryable response for a read timeout" do
+      timeout = Net::ReadTimeout.new
+      stub_request(:post, "https://github.fake/api/v3/graphql").to_raise(timeout)
+      expect(logger).to receive(:warn).with("#{timeout.class} #{timeout.message}")
+      response = subject.send(:graphql_http_post_real, "nonsense")
+      expect(response).to eq(code: 500, data: nil)
+    end
+
     it "logs at error and returns code=500 and exception message for an unhandled exception" do
       exc = StandardError.new("Oh no you don't")
       stub_request(:post, "https://github.fake/api/v3/graphql").to_raise(exc)
