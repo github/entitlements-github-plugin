@@ -66,6 +66,7 @@ module Entitlements
               return true
             elsif new_membership[:state] == "active"
               org_members[user] = role
+              add_org_member_to_normalized_lookup(user)
               return true
             end
           end
@@ -92,6 +93,7 @@ module Entitlements
           # operations in this organization will ignore this user.
           if result
             org_members.delete(user)
+            remove_org_member_from_normalized_lookup(user)
             pending_members.delete(user)
           end
 

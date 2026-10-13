@@ -144,9 +144,10 @@ module Entitlements
         # Returns a set of strings with usernames meeting the criteria.
         Contract Entitlements::Models::Group => C::SetOf[String]
         def auto_generate_ignored_users(entitlement_group)
-          org_members = github.org_members.keys.map(&:downcase)
-          group_members = entitlement_group.member_strings.map(&:downcase)
-          Set.new(group_members - org_members)
+          entitlement_group.member_strings.each_with_object(Set.new) do |username, ignored_users|
+            normalized_username = username.downcase
+            ignored_users.add(normalized_username) unless github.org_member?(normalized_username)
+          end
         end
 
         private
