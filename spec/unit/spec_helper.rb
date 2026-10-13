@@ -41,6 +41,7 @@ require "webmock/rspec"
 require "entitlements"
 
 require_relative "../../lib/entitlements/backend/github_org"
+require_relative "../../lib/entitlements/backend/github_enterprise_team"
 require_relative "../../lib/entitlements/backend/github_team"
 require_relative "../../lib/entitlements/service/github"
 
