@@ -98,6 +98,28 @@ describe Entitlements::Backend::GitHubTeam::Provider do
     end
   end
 
+  describe "#prefetch" do
+    let(:missing_group) do
+      Entitlements::Models::Group.new(
+        dn: "cn=missing-cats,ou=Github,dc=github,dc=fake",
+        members: Set.new
+      )
+    end
+
+    it "populates the existing provider cache for present and missing teams" do
+      allow(subject).to receive(:github).and_return(github)
+      expect(github).to receive(:read_teams).with([group, missing_group])
+        .and_return("cats" => team, "missing-cats" => nil)
+      expect(logger).to receive(:debug).with("Loaded cn=cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake (id=1001) with 2 member(s)")
+
+      subject.prefetch([group, missing_group])
+
+      expect(github).not_to receive(:read_team)
+      expect(subject.read(group)).to eq(team)
+      expect(subject.read(missing_group)).to be_nil
+    end
+  end
+
   describe "#diff" do
     let(:team_identifier) { "grumpy-cats" }
     let(:team_dn) { "cn=#{team_identifier},ou=kittensinc,ou=GitHub,dc=github,dc=fake" }

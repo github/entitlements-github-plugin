@@ -79,9 +79,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
     it "returns nil when the team does not exist" do
       graphql_response = '{"data":{"organization":{"team":null}}}'
       stub_request(:post, "https://github.fake/api/v3/graphql")
-        .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"team-does-not-exist\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
-        ).to_return(status: 200, body: graphql_response)
+        .to_return(status: 200, body: graphql_response.sub('"team"', '"team0"'))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/team-does-not-exist")
@@ -92,9 +90,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object when the team exists" do
       stub_request(:post, "https://github.fake/api/v3/graphql")
-        .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
-        ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100))
+        .to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
@@ -109,9 +105,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists" do
       stub_request(:post, "https://github.fake/api/v3/graphql")
-        .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
-        ).to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100, parent_team: "parent-cats"))
+        .to_return(status: 200, body: graphql_response(cuddly_kittens, 0, 100, parent_team: "parent-cats"))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
@@ -128,9 +122,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
 
     it "returns a Entitlements::Backend::GitHubTeam::Models::Team object with parent team when the team exists but has empty entitlement metadata" do
       stub_request(:post, "https://github.fake/api/v3/graphql")
-        .with(
-          body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"cuddly-kittens\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}"
-        ).to_return(status: 200, body: graphql_response(cuddly_kittens_no_metadata, 0, 100, parent_team: "parent-cats"))
+        .to_return(status: 200, body: graphql_response(cuddly_kittens_no_metadata, 0, 100, parent_team: "parent-cats"))
 
       expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
       expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/cuddly-kittens")
@@ -222,6 +214,226 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(result.member_strings).to eq(people)
       expect(result.metadata.key?("application_owner")).to eq(true)
       expect(result.metadata["application_owner"]).to eq("cheetoh")
+    end
+  end
+
+  describe "#read_teams" do
+    let(:alpha_group) do
+      Entitlements::Models::Group.new(
+        dn: "cn=alpha-cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        members: Set.new,
+        metadata: { "application_owner" => "snowshoe" }
+      )
+    end
+
+    let(:beta_group) do
+      Entitlements::Models::Group.new(
+        dn: "cn=beta-cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        members: Set.new,
+        metadata: nil
+      )
+    end
+
+    let(:missing_group) do
+      Entitlements::Models::Group.new(
+        dn: "cn=missing-cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+        members: Set.new,
+        metadata: {}
+      )
+    end
+
+    it "batches aliases, maps reordered responses, and paginates only unfinished teams" do
+      allow(subject).to receive(:max_graphql_results).and_return(2)
+      queries = []
+      responses = [
+        {
+          "data" => {
+            "rateLimit" => { "cost" => 5, "remaining" => 4_995, "resetAt" => "later" },
+            "organization" => {
+              "team2" => nil,
+              "team1" => {
+                "databaseId" => 202,
+                "parentTeam" => nil,
+                "members" => { "edges" => [] }
+              },
+              "team0" => {
+                "databaseId" => 101,
+                "parentTeam" => { "slug" => "parent-cats" },
+                "members" => {
+                  "edges" => [
+                    { "node" => { "login" => "ALPHA" }, "role" => "MAINTAINER", "cursor" => "cursor-1" },
+                    { "node" => { "login" => "Beta" }, "role" => "MEMBER", "cursor" => "cursor-2" }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "data" => {
+            "organization" => {
+              "team0" => {
+                "databaseId" => 101,
+                "parentTeam" => { "slug" => "parent-cats" },
+                "members" => {
+                  "edges" => [
+                    { "node" => { "login" => "GAMMA" }, "role" => "MEMBER", "cursor" => "cursor-3" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+      allow(subject).to receive(:graphql_http_post) do |query|
+        queries << query
+        { code: 200, data: responses.shift }
+      end
+
+      expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/alpha-cats")
+      expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/beta-cats")
+      expect(logger).to receive(:debug).with("Loading GitHub team github.fake:kittensinc/missing-cats")
+      expect(logger).to receive(:debug).with("GitHub GraphQL team batch cost=5 remaining=4995 reset_at=later")
+      expect(logger).to receive(:warn).with("Team missing-cats does not exist in this GitHub.com organization. If applied, the team will be created.")
+
+      result = subject.read_teams([alpha_group, beta_group, missing_group])
+
+      expect(queries.size).to eq(2)
+      expect(queries.first).to include('team0: team(slug: "alpha-cats")')
+      expect(queries.first).to include('team1: team(slug: "beta-cats")')
+      expect(queries.first).to include('team2: team(slug: "missing-cats")')
+      expect(queries.last).to include('team0: team(slug: "alpha-cats")')
+      expect(queries.last).to include('after: "cursor-2"')
+      expect(queries.last).not_to include("beta-cats")
+      expect(queries.last).not_to include("missing-cats")
+
+      expect(result.fetch("alpha-cats").member_strings).to eq(Set.new(%w[alpha beta gamma]))
+      expect(result.fetch("alpha-cats").team_id).to eq(101)
+      expect(result.fetch("alpha-cats").metadata).to eq(
+        "application_owner" => "snowshoe",
+        "parent_team_name" => "parent-cats",
+        "team_maintainers" => "alpha"
+      )
+      expect(result.fetch("beta-cats").member_strings).to eq(Set.new)
+      expect(result.fetch("missing-cats")).to be_nil
+    end
+
+    it "excludes predictive-cache hits from authoritative batches" do
+      alpha_dn = "cn=alpha-cats,ou=kittensinc,ou=GitHub,dc=github,dc=fake"
+      cache[:predictive_state] = {
+        by_dn: { alpha_dn => { members: Set.new(%w[CachedCat]), metadata: nil } },
+        invalid: Set.new
+      }
+      authoritative_data = {
+        members: ["api-cat"],
+        roles: { "api-cat" => "member" },
+        team_id: 202,
+        parent_team_name: nil
+      }
+
+      expect(subject).to receive(:graphql_team_data).with("beta-cats").and_return(authoritative_data)
+      result = subject.read_teams([alpha_group, beta_group])
+
+      expect(result.fetch("alpha-cats").team_id).to eq(-1)
+      expect(result.fetch("alpha-cats").member_strings).to eq(Set.new(%w[cachedcat]))
+      expect(result.fetch("beta-cats").team_id).to eq(202)
+      expect(subject.from_predictive_cache?(alpha_group)).to eq(true)
+      expect(subject.from_predictive_cache?(beta_group)).to eq(false)
+    end
+
+    it "respects the configured batch boundary" do
+      allow(subject).to receive(:graphql_team_batch_size).and_return(2)
+      groups = %w[one two three].map do |slug|
+        Entitlements::Models::Group.new(
+          dn: "cn=#{slug},ou=kittensinc,ou=GitHub,dc=github,dc=fake",
+          members: Set.new,
+          metadata: nil
+        )
+      end
+      queries = []
+      allow(subject).to receive(:graphql_http_post) do |query|
+        queries << query
+        aliases = query.scan(/(team\d+): team\(slug: "([^"]+)"\)/)
+        organization = aliases.to_h do |team_alias, slug|
+          [team_alias, { "databaseId" => slug.length, "parentTeam" => nil, "members" => { "edges" => [] } }]
+        end
+        { code: 200, data: { "data" => { "organization" => organization } } }
+      end
+
+      subject.read_teams(groups)
+
+      expect(queries.size).to eq(2)
+      expect(queries.first.scan(/team\d+: team/).size).to eq(2)
+      expect(queries.last.scan(/team\d+: team/).size).to eq(1)
+    end
+
+    it "escapes GraphQL string values" do
+      expect(subject.send(:graphql_string_literal, "cats\"\\\n")).to eq("\"cats\\\"\\\\\\n\"")
+    end
+
+    it "fails when the organization is missing from an otherwise successful response" do
+      allow(subject).to receive(:graphql_http_post)
+        .and_return(code: 200, data: { "data" => { "organization" => nil } })
+
+      expect do
+        subject.read_teams([alpha_group, beta_group])
+      end.to raise_error(RuntimeError, "GraphQL response missing organization kittensinc")
+    end
+
+    it "enforces the per-team pagination sanity limit" do
+      stub_const("#{described_class}::MAX_GRAPHQL_TEAM_PAGES", 2)
+      allow(subject).to receive(:max_graphql_results).and_return(1)
+      allow(subject).to receive(:graphql_http_post).and_return(
+        code: 200,
+        data: {
+          "data" => {
+            "organization" => {
+              "team0" => {
+                "databaseId" => 101,
+                "parentTeam" => nil,
+                "members" => {
+                  "edges" => [
+                    { "node" => { "login" => "cat" }, "role" => "MEMBER", "cursor" => "next" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      )
+
+      expect do
+        subject.read_teams([alpha_group])
+      end.to raise_error(RuntimeError, "GitHub team alpha-cats exceeded the 2-page GraphQL limit")
+    end
+
+    it "fails when a team changes database ID during pagination" do
+      allow(subject).to receive(:max_graphql_results).and_return(1)
+      responses = [101, 202].map do |team_id|
+        {
+          code: 200,
+          data: {
+            "data" => {
+              "organization" => {
+                "team0" => {
+                  "databaseId" => team_id,
+                  "parentTeam" => nil,
+                  "members" => {
+                    "edges" => [
+                      { "node" => { "login" => "cat" }, "role" => "MEMBER", "cursor" => "next" }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      end
+      allow(subject).to receive(:graphql_http_post) { responses.shift }
+
+      expect do
+        subject.read_teams([alpha_group])
+      end.to raise_error(RuntimeError, "GitHub team alpha-cats changed database ID during pagination")
     end
   end
 
@@ -699,7 +911,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       end
 
       it "raises a custom exception when team is not found" do
-        empty = JSON.generate("data" => { "organization" => { "team" => nil } })
+        empty = JSON.generate("data" => { "organization" => { "team0" => nil } })
         stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: empty)
         expect do
           subject.send(:graphql_team_data, "crying-cat-face")
@@ -718,12 +930,11 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "parses team data from a single page of results" do
         stub_request(:post, "https://github.fake/api/v3/graphql")
           .with(
-            body: "{\"query\":\"{\\norganization(login: \\\"kittensinc\\\") {\\nteam(slug: \\\"grumpy-cat\\\") {\\ndatabaseId\\nparentTeam {\\nslug\\n}\\nmembers(first: 100, membership: IMMEDIATE) {\\nedges {\\nnode {\\nlogin\\n}\\nrole\\ncursor\\n}\\n}\\n}\\n}\\n}\"}",
             headers: {
               "Authorization" => "bearer GoPackGo",
               "Content-Type" => "application/json"
             }
-          ).to_return(status: 200, body: graphql_dotcom_response)
+          ).to_return(status: 200, body: graphql_dotcom_response.sub('"team"', '"team0"'))
 
         result = subject.send(:graphql_team_data, "grumpy-cat")
         members = ["highlander", "blackmanx", "toyger", "ocicat", "hubot", "korat", "mainecoon", "russianblue",
@@ -761,9 +972,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "parses team data from paginated results" do
         stub_request(:post, "https://github.fake/api/v3/graphql")
           .to_return(
-            { status: 200, body: graphql_dotcom_response_1 },
-            { status: 200, body: graphql_dotcom_response_2 },
-            { status: 200, body: graphql_dotcom_response_3 }
+            { status: 200, body: graphql_dotcom_response_1.sub('"team"', '"team0"') },
+            { status: 200, body: graphql_dotcom_response_2.sub('"team"', '"team0"') },
+            { status: 200, body: graphql_dotcom_response_3.sub('"team"', '"team0"') }
           )
 
         result = subject.send(:graphql_team_data, "grumpy-cat")
@@ -802,9 +1013,9 @@ describe Entitlements::Backend::GitHubTeam::Service do
       it "parses team data from paginated results" do
         stub_request(:post, "https://github.fake/api/v3/graphql")
           .to_return(
-            { status: 200, body: graphql_dotcom_response_1 },
-            { status: 200, body: graphql_dotcom_response_2 },
-            { status: 200, body: graphql_dotcom_response_3 }
+            { status: 200, body: graphql_dotcom_response_1.sub('"team"', '"team0"') },
+            { status: 200, body: graphql_dotcom_response_2.sub('"team"', '"team0"') },
+            { status: 200, body: graphql_dotcom_response_3.sub('"team"', '"team0"') }
           )
 
         result = subject.send(:graphql_team_data, "grumpy-cat")

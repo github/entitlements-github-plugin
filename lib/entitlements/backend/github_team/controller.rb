@@ -26,10 +26,8 @@ module Entitlements
 
         def prefetch
           teams = Entitlements::Data::Groups::Calculated.read_all(group_name, config)
-          teams.each do |team_slug|
-            entitlement_group = Entitlements::Data::Groups::Calculated.read(team_slug)
-            provider.read(entitlement_group)
-          end
+          entitlement_groups = teams.map { |team_slug| Entitlements::Data::Groups::Calculated.read(team_slug) }
+          provider.prefetch(entitlement_groups)
         end
 
         # Calculation routines.
