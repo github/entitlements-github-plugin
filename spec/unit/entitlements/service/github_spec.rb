@@ -340,9 +340,9 @@ describe Entitlements::Service::GitHub do
       expect(replacement_http).to receive(:start)
       expect(replacement_http).to receive(:request).and_return(response)
       expect_any_instance_of(Object).to receive(:sleep).with(1).once
-      expect(logger).to receive(:error).
-        with("Caught Net::ReadTimeout POSTing to https://github.fake/api/v3/graphql: Net::ReadTimeout with \"execution expired\"")
-      expect(logger).to receive(:warn).
+      expect(logger).to receive(:warn).ordered.
+        with("Net::ReadTimeout Net::ReadTimeout with \"execution expired\"")
+      expect(logger).to receive(:warn).ordered.
         with("GraphQL failed on try 1 of 3. Will retry.")
 
       expect(subject.send(:graphql_http_post, query)).to eq(code: 200, data: answer)
@@ -448,6 +448,14 @@ describe Entitlements::Service::GitHub do
       stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: JSON.generate(answer))
       response = subject.send(:graphql_http_post_real, "nonsense")
       expect(response).to eq(code: 200, data: answer)
+    end
+
+    it "logs at warn and returns a retryable response for a read timeout" do
+      timeout = Net::ReadTimeout.new
+      stub_request(:post, "https://github.fake/api/v3/graphql").to_raise(timeout)
+      expect(logger).to receive(:warn).with("#{timeout.class} #{timeout.message}")
+      response = subject.send(:graphql_http_post_real, "nonsense")
+      expect(response).to eq(code: 500, data: nil)
     end
 
     it "logs at error and returns code=500 and exception message for an unhandled exception" do

@@ -392,23 +392,29 @@ module Entitlements
             return { code: response.code.to_i, data: { "body" => response.body } }
           end
 
-          begin
-            data = JSON.parse(response.body)
-            if data.key?("errors")
-              # Synthesized 500 below triggers a retry, so log at WARN. Note: some GraphQL
-              # `errors` are permanent (bad query, auth, schema). The retry wrapper's final
-              # "Giving up" ERROR will surface persistent cases.
-              Entitlements.logger.warn "Errors reported: #{data['errors'].inspect}"
-              return { code: 500, data: }
-            end
-            { code: response.code.to_i, data: }
-          rescue JSON::ParserError => e
-            # JSON parse errors mean the API returned something we can't interpret. The
-            # synthesized 500 below triggers a retry, but the cause is more likely a real
-            # protocol/server problem than a transient network blip, so log at ERROR.
-            Entitlements.logger.error "#{e.class} #{e.message}: #{response.body.inspect}"
-            { code: 500, data: { "body" => response.body } }
+          data = JSON.parse(response.body)
+          if data.key?("errors")
+            # Synthesized 500 below triggers a retry, so log at WARN. Note: some GraphQL
+            # `errors` are permanent (bad query, auth, schema). The retry wrapper's final
+            # "Giving up" ERROR will surface persistent cases.
+            Entitlements.logger.warn "Errors reported: #{data['errors'].inspect}"
+            return { code: 500, data: }
           end
+
+          { code: response.code.to_i, data: }
+
+        rescue Net::ReadTimeout => e
+          # Defend against network blips, those can be safely retried via the
+          # synthesized 500 below, so log at WARN.
+          reset_graphql_http
+          Entitlements.logger.warn "#{e.class} #{e.message}"
+          { code: 500, data: nil }
+        rescue JSON::ParserError => e
+          # JSON parse errors mean the API returned something we can't interpret. The
+          # synthesized 500 below triggers a retry, but the cause is more likely a real
+          # protocol/server problem than a transient network blip, so log at ERROR.
+          Entitlements.logger.error "#{e.class} #{e.message}: #{response.body.inspect}"
+          { code: 500, data: { "body" => response.body } }
         rescue => e
           # Catch-all for any unexpected exception (network blip OR local code bug).
           # We retry below via the synthesized 500, but log at ERROR because this
