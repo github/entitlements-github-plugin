@@ -459,6 +459,36 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(result).to eq(true)
     end
 
+    it "returns false when the parent team update fails" do
+      expect(subject).to receive(:team_by_name).with(org_name: "kittensinc",
+                                                     team_name: "cuddly-kittens").and_return({ id: 10 })
+      expect(subject).to receive(:update_team).with(team: team_data_old,
+                                                    metadata: { parent_team_id: 10 }).and_return(false)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Parent team change found - From No Parent Team to cuddly-kittens/)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 0, removed 0/)
+      result = subject.sync_team(team_metadata_add, team_data_old)
+      expect(result).to eq(false)
+    end
+
+    it "returns true when the parent team update fails but members change" do
+      team_metadata_add_member = Entitlements::Backend::GitHubTeam::Models::Team.new(
+        team_id: 1001,
+        team_name: "russian-blues",
+        members: Set.new(%w[blackmanx highlander ragamuffin MAINECOON]),
+        ou: "ou=kittensinc,dc=github,dc=com",
+        metadata: { "parent_team_name" => "cuddly-kittens" }
+      )
+      expect(subject).to receive(:team_by_name).with(org_name: "kittensinc",
+                                                     team_name: "cuddly-kittens").and_return({ id: 10 })
+      expect(subject).to receive(:update_team).with(team: team_data_old,
+                                                    metadata: { parent_team_id: 10 }).and_return(false)
+      expect(subject).to receive(:add_user_to_team).with(user: "highlander", team: team_data_old).and_return(true)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Parent team change found - From No Parent Team to cuddly-kittens/)
+      expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Added 1, removed 0/)
+      result = subject.sync_team(team_metadata_add_member, team_data_old)
+      expect(result).to eq(true)
+    end
+
     it "returns true when there were metadata changes to add maintainer" do
       allow(subject).to receive(:read_team).with(team_metadata_add_maintainer).and_return(team_metadata_maintainer_old)
       expect(logger).to receive(:debug).with(/sync_team\(russian-blues=1001\): Maintainer members change found - From \["ragamuffin"\] to \["blackmanx", "ragamuffin"\]/)
@@ -971,7 +1001,7 @@ describe Entitlements::Backend::GitHubTeam::Service do
       allow(subject).to receive(:octokit).and_return(octokit)
       expect(octokit).to receive(:update_team).and_raise(Octokit::UnprocessableEntity)
       expect(logger).to receive(:debug).with("update_team(team=mainecoon)")
-      expect(logger).to receive(:debug).with("update_team(team=mainecoon) ERROR - Octokit::UnprocessableEntity")
+      expect(logger).to receive(:warn).with("update_team(team=mainecoon) ERROR - Octokit::UnprocessableEntity")
 
       created = subject.update_team(team: team_data_new)
       expect(created).to eq(false)
