@@ -223,6 +223,96 @@ describe Entitlements::Backend::GitHubTeam::Service do
       expect(result.metadata.key?("application_owner")).to eq(true)
       expect(result.metadata["application_owner"]).to eq("cheetoh")
     end
+
+    context "with a parent team in the entitlement" do
+      let(:entitlement_group_wants_parent) do
+        Entitlements::Models::Group.new(
+          dn: team_dn,
+          description: ":smile_cat:",
+          members: Set.new(%w[russian-blue snowshoe tabby siamese housecat tiger]),
+          metadata: { "application_owner" => "russian_blue", "parent_team_name" => "parent-cats" }
+        )
+      end
+      let(:people) { Set.new(%w[blackmanx ragamuffin russianblue]) }
+      let(:api_team) { { members: people.to_a, team_id: 1001, parent_team_name: nil, roles: {} } }
+
+      def cache_with_metadata(metadata)
+        Entitlements.cache[:predictive_state] =
+          { by_ou: {}, by_dn: { team_dn => { members: people, metadata: } }, invalid: Set.new }
+      end
+
+      it "uses the parent from the API, even when the team has none" do
+        expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(api_team)
+
+        result = subject.read_team(entitlement_group_wants_parent)
+        expect(result.team_id).to eq(1001)
+        expect(result.metadata).to eq(
+          "application_owner" => "russian_blue",
+          "parent_team_name" => nil,
+          "team_maintainers" => nil
+        )
+      end
+
+      it "reads from the API when the cached metadata is nil" do
+        cache_with_metadata(nil)
+        expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(api_team)
+
+        result = subject.read_team(entitlement_group_wants_parent)
+        expect(result.team_id).to eq(1001)
+        expect(result.metadata["parent_team_name"]).to eq(nil)
+        expect(subject.from_predictive_cache?(entitlement_group_wants_parent)).to eq(false)
+      end
+
+      it "reads from the API when the cache doesn't record a parent" do
+        cache_with_metadata("application_owner" => "cheetoh")
+        allow(logger).to receive(:debug)
+        expect(logger).to receive(:debug).with("Parent team for GitHub team github.fake:kittensinc/cuddly-kittens is not in the cache")
+        expect(subject).to receive(:graphql_team_data).with(team_identifier).and_return(api_team)
+
+        result = subject.read_team(entitlement_group_wants_parent)
+        expect(result.team_id).to eq(1001)
+        expect(result.metadata["parent_team_name"]).to eq(nil)
+        expect(subject.from_predictive_cache?(entitlement_group_wants_parent)).to eq(false)
+      end
+
+      it "uses the cache when it records no parent" do
+        cache_with_metadata("parent_team_name" => nil)
+        expect(subject).not_to receive(:graphql_team_data)
+
+        result = subject.read_team(entitlement_group_wants_parent)
+        expect(result.team_id).to eq(-1)
+        expect(result.metadata["parent_team_name"]).to eq(nil)
+        expect(result.metadata["application_owner"]).to eq("russian_blue")
+      end
+
+      it "uses the cache when it records a parent" do
+        cache_with_metadata("parent_team_name" => "parent-cats")
+        expect(subject).not_to receive(:graphql_team_data)
+
+        result = subject.read_team(entitlement_group_wants_parent)
+        expect(result.team_id).to eq(-1)
+        expect(result.metadata["parent_team_name"]).to eq("parent-cats")
+      end
+    end
+
+    it "doesn't add a parent from the API when there is no entitlement metadata" do
+      expect(subject).to receive(:graphql_team_data).with(team_identifier)
+        .and_return(members: [], team_id: 1001, parent_team_name: nil, roles: {})
+
+      result = subject.read_team(entitlement_group_exists_no_metadata)
+      expect(result.metadata).to eq("parent_team_name" => nil, "team_maintainers" => nil)
+    end
+
+    it "uses the cache without a parent when the entitlement doesn't want one" do
+      people = Set.new(%w[blackmanx ragamuffin russianblue])
+      Entitlements.cache[:predictive_state] =
+        { by_ou: {}, by_dn: { team_dn => { members: people, metadata: {} } }, invalid: Set.new }
+      expect(subject).not_to receive(:graphql_team_data)
+
+      result = subject.read_team(entitlement_group_exists)
+      expect(result.team_id).to eq(-1)
+      expect(result.metadata["parent_team_name"]).to eq(nil)
+    end
   end
 
   describe "#from_predictive_cache?" do
