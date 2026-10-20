@@ -17,7 +17,7 @@ module Entitlements
           organization_access.members
         end
 
-        # Read organization membership from the snapshot populated by github_org reconciliation.
+        # Combine shared organization membership with the cached base repository permission.
         #
         # Returns an organization access model.
         Contract C::None => Models::OrganizationAccess
@@ -25,7 +25,7 @@ module Entitlements
           @organization_access ||= begin
             # github_org runs first and seeds this shared cache. The inherited REST fallback
             # remains available when the repository backend is run independently.
-            Models::OrganizationAccess.new(members: org_members, base_role: "none", assignments: {})
+            Models::OrganizationAccess.new(members: org_members, base_role: organization_base_role, assignments: {})
           end
         rescue Octokit::Error => e
           GitHubRepository.fail!("Reading organization membership for #{org} failed: #{e.message}")
@@ -39,6 +39,7 @@ module Entitlements
         # Returns a repository access model.
         Contract String, C::KeywordArgs[refresh: C::Optional[C::Bool]] => Models::RepositoryAccess
         def read_repository(repository, refresh: false)
+          @organization_access = nil if refresh
           @repositories ||= {}
           @repositories.delete(repository.downcase) if refresh
           @repositories[repository.downcase] ||= begin
@@ -69,6 +70,21 @@ module Entitlements
         end
 
         private
+
+        # Read the organization's base repository permission once per service instance.
+        Contract C::None => String
+        def organization_base_role
+          @organization_base_role ||= begin
+            organization = octokit.organization(org)
+            role = organization[:default_repository_permission] if organization.is_a?(Sawyer::Resource)
+            unless %w[none read write admin].include?(role)
+              GitHubRepository.fail!("Missing or unsupported organization base permission for #{org}: #{role.inspect}")
+            end
+            role
+          end
+        rescue Octokit::Error => e
+          GitHubRepository.fail!("Reading organization base permission for #{org} failed: #{e.message}")
+        end
 
         # Read team grants, preserving their access sources and parent relationships.
         #
@@ -268,6 +284,7 @@ module Entitlements
 
           validate_invitation!(result)
           Entitlements.logger.warn("#{repository}: invitation created for #{instruction.fetch(:login)}; access is not yet active")
+          nil
         end
 
         # Validate a pending repository invitation response.

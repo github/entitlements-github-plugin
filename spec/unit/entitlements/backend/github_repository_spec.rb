@@ -36,8 +36,15 @@ describe Entitlements::Backend::GitHubRepository do
     { id: id, name: name, base_role: base_role, permissions: [] }
   end
 
+  def stub_organization(base_role = "none", endpoint: "https://api.github.com/orgs/example")
+    stub_request(:get, endpoint)
+      .to_return(status: 200, body: JSON.generate(default_repository_permission: base_role),
+        headers: { "Content-Type" => "application/json" })
+  end
+
   before do
     stub_teams
+    stub_organization
   end
 
   def collaborator(login, role = "write")
@@ -475,6 +482,55 @@ describe Entitlements::Backend::GitHubRepository do
   end
 
   describe "end-to-end reconciliation" do
+    ["admin", nil].each do |role|
+      it "rejects stale plans after shared membership #{role ? 'promotion' : 'removal'}" do
+        cache[:github_org_members] = { "|example" => { cache: false, value: members.dup } }
+        stub_collaborators
+        put = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice").to_return(status: 204)
+        provider = backend::Provider.new(config: config)
+        action = provider.diff(access("alice" => "write"), "repos")
+        membership = cache[:github_org_members]["|example"][:value]
+        role ? membership["alice"] = role : membership.delete("alice")
+
+        expect { provider.commit(action) }.to raise_error(backend::Error, /changed since calculation/)
+        expect(action.existing.organization_access.members["alice"]).to eq("member")
+        expect(put).not_to have_been_requested
+        expect(a_request(:get, "https://api.github.com/orgs/example")).to have_been_made.once
+        expect(a_request(:get, %r{\Ahttps://api\.github\.com/orgs/example/})).not_to have_been_made
+      end
+    end
+
+    it "defers below-base grants using REST settings and preserves their current direct roles" do
+      cache[:github_org_members] = { "|example" => { cache: false, value: members } }
+      stub_organization("write")
+      stub_collaborators([collaborator("alice", "admin")])
+      stub_teams([{ id: 1, slug: "engineering", parent: nil }])
+      expect(logger).to receive(:warn).with(/DEFER app: alice direct role read; inherited write.*organization base write/)
+
+      action = backend::Provider.new(config: config).diff(access("alice" => "read"), "repos")
+
+      expect(action.existing.organization_access.base_role).to eq("write")
+      expect(action.updated.roles).to eq("alice" => "admin")
+      expect(action.implementation).to eq([{ action: :remove_team, team_id: 1, slug: "engineering" }])
+    end
+
+    %w[write admin].each do |role|
+      it "applies #{role} direct grants at or above the organization base" do
+        cache[:github_org_members] = { "|example" => { cache: false, value: members } }
+        stub_organization("write")
+        stub_collaborators
+        put = stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
+          .with(body: { permission: backend::ROLES.fetch(role) }).to_return(status: 204)
+        provider = backend::Provider.new(config: config)
+
+        action = provider.diff(access("alice" => role), "repos")
+        provider.commit(action)
+
+        expect(put).to have_been_requested.once
+        expect(a_request(:get, "https://api.github.com/orgs/example")).to have_been_made.once
+      end
+    end
+
     it "converges to individual-only grants, removing teams and undeclared direct grants" do
       cache[:people_obj] = Entitlements::Data::People::YAML.new(filename: fixture("people.yaml"))
       cache[:file_objects] = {}
@@ -514,7 +570,8 @@ describe Entitlements::Backend::GitHubRepository do
       expect(put).to have_been_requested.once
       expect(delete).to have_been_requested.once
       expect(remove_team).to have_been_requested.once
-      expect(a_request(:get, %r{\Ahttps://api\.github\.com/orgs/example(?:/members|/organization-roles)?\z}))
+      expect(a_request(:get, "https://api.github.com/orgs/example")).to have_been_made.once
+      expect(a_request(:get, %r{\Ahttps://api\.github\.com/orgs/example/(?:members|organization-roles)\z}))
         .not_to have_been_made
       expect(a_request(:delete, "https://api.github.com/repos/example/app/collaborators/carol")).not_to have_been_made
       expect(a_request(:delete, "https://api.github.com/repos/example/app/collaborators/owner")).not_to have_been_made
@@ -532,12 +589,37 @@ describe Entitlements::Backend::GitHubRepository do
       expect(service.organization_access.owner?("owner")).to be(true)
     end
 
-    it "does not read organization settings or role assignments" do
-      context = service.organization_access
-      expect(context.base_role).to eq("none")
-      expect(context.assignments).to be_empty
-      expect(a_request(:get, "https://api.github.com/orgs/example")).not_to have_been_made
+    it "reuses organization settings across repositories and membership refreshes without reading role assignments" do
+      settings = stub_organization("read")
+      stub_collaborators
+      stub_collaborators([], endpoint: "https://api.github.com/repos/example/other/collaborators")
+      stub_teams([], endpoint: "https://api.github.com/repos/example/other/teams")
+
+      snapshots = [
+        service.read_repository("app"),
+        service.read_repository("other"),
+        service.read_repository("app", refresh: true),
+      ]
+
+      expect(snapshots.map { |snapshot| snapshot.organization_access.base_role }).to eq(%w[read read read])
+      expect(service.organization_access.assignments).to be_empty
+      expect(settings).to have_been_requested.once
       expect(a_request(:get, %r{/orgs/example/organization-roles})).not_to have_been_made
+    end
+
+    it "rejects missing, null, unsupported or malformed organization base settings" do
+      ["{}", '{"default_repository_permission":null}', '{"default_repository_permission":"custom"}',
+        '{"default_repository_permission":1}', "null", "[]"].each do |body|
+        stub_request(:get, "https://api.github.com/orgs/example")
+          .to_return(status: 200, body: body, headers: { "Content-Type" => "application/json" })
+        expect { service.organization_access }.to raise_error(backend::Error, /Missing or unsupported organization base permission/)
+      end
+    end
+
+    it "surfaces organization settings permission failures" do
+      stub_request(:get, "https://api.github.com/orgs/example")
+        .to_return(status: 403, body: '{"message":"denied"}', headers: { "Content-Type" => "application/json" })
+      expect { service.organization_access }.to raise_error(backend::Error, /Reading organization base permission/)
     end
 
     it "wraps organization membership transport failures" do
@@ -665,7 +747,7 @@ describe Entitlements::Backend::GitHubRepository do
     it "reports invitations without claiming active access" do
       stub_request(:put, "https://api.github.com/repos/example/app/collaborators/alice")
         .to_return(status: 201, body: '{"id":1}', headers: { "Content-Type" => "application/json" })
-      expect(logger).to receive(:warn).with(/invitation created.*not yet active/)
+      expect(logger).to receive(:warn).with(/invitation created.*not yet active/).and_call_original
       service.sync_repository("app", [{ action: :upsert, login: "alice", permission: "pull" }])
     end
 
@@ -723,8 +805,8 @@ describe Entitlements::Backend::GitHubRepository do
 
     it "uses GHES REST API paths" do
       enterprise = backend::Service.new(org: "example", token: "test-token", ou: base, addr: "https://github.test/api/v3/")
-      allow(enterprise).to receive(:active_members).and_return(members)
-      allow(enterprise).to receive(:organization_access).and_return(organization_access)
+      allow(enterprise).to receive(:org_members).and_return(members)
+      settings = stub_organization("none", endpoint: "https://github.test/api/v3/orgs/example")
       stub_teams([], endpoint: "https://github.test/api/v3/repos/example/app/teams")
       stub_collaborators([collaborator("alice")],
         endpoint: "https://github.test/api/v3/repos/example/app/collaborators")
@@ -732,6 +814,7 @@ describe Entitlements::Backend::GitHubRepository do
       request = stub_request(:delete, "https://github.test/api/v3/repos/example/app/collaborators/alice").to_return(status: 204)
       enterprise.sync_repository("app", [{ action: :remove, login: "alice" }])
       expect(request).to have_been_requested.once
+      expect(settings).to have_been_requested.once
     end
 
     it "paginates repository teams including empty teams, independent of collaborators" do

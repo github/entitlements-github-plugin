@@ -135,6 +135,10 @@ Group references, filters, and expiration are evaluated by the normal Entitlemen
 
 **Custom roles are currently unsupported and organization level grants are not removed.**
 
+The backend reads `default_repository_permission` from `GET /orgs/{org}` once per backend instance.
+The credential must expose this setting; missing or unsupported values cause an explicit failure.
+Desired direct roles below the organization base are deferred with a warning, preserving existing direct grants.
+
 GitHub's REST collaborator inventory identifies direct repository associations, but reports each collaborator's highest
 effective role after inherited team, organization, and enterprise access. A stronger inherited role can therefore mask a
 lower direct role during calculation; the backend reconciles the effective role returned by GitHub.
