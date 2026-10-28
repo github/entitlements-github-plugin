@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    entitlements-github-plugin (1.2.6)
+    entitlements-github-plugin (1.2.7)
       contracts (~> 0.17.0)
       faraday (~> 2.0)
       faraday-net_http_persistent (~> 2.3)
@@ -186,4 +186,4 @@ DEPENDENCIES
   webmock (~> 3.23, >= 3.23.1)
 
 BUNDLED WITH
-   2.5.9
+   2.7.2
