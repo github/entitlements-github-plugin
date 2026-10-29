@@ -223,6 +223,28 @@ describe Entitlements::Backend::GitHubOrg::Service do
           expect(result).to eq(false)
         end
       end
+
+      context "when the API returns a forbidden error" do
+        it "warns and returns false" do
+          expect(logger).to receive(:debug).with("github.fake add_user_to_organization(user=bob, org=kittensinc, role=admin)")
+          expect(logger).to receive(:debug).with("Setting up GitHub API connection to https://github.fake/api/v3/")
+          expect(logger).to receive(:warn).with(/Forbidden from adding bob to organization kittensinc with role admin/)
+
+          stub_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
+            status: 403,
+            headers: {
+              "Content-type" => "application/json"
+            },
+            body: JSON.generate({
+              "message"           => "Forbidden",
+              "documentation_url" => "https://docs.github.com/rest"
+            })
+          )
+
+          result = subject.send(:add_user_to_organization, "bob", "admin")
+          expect(result).to eq(false)
+        end
+      end
     end
   end
 
