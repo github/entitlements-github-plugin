@@ -46,7 +46,7 @@ module Entitlements
           Entitlements.logger.debug "#{identifier} add_user_to_organization(user=#{user}, org=#{org}, role=#{role})"
 
           begin
-            new_membership = Retryable.with_context(:default, not: [Octokit::NotFound]) do
+            new_membership = Retryable.with_context(:default, not: [Octokit::NotFound, Octokit::Forbidden]) do
               octokit.update_organization_membership(org, user:, role:)
             end
           rescue Octokit::NotFound => e
@@ -54,8 +54,11 @@ module Entitlements
 
             Entitlements.logger.warn "User #{user} not found in GitHub instance #{identifier}, ignoring."
             return false
-          rescue Octokit::UnprocessableEntity => e
+          rescue Octokit::UnprocessableEntity => e # code 422
             Entitlements.logger.warn "Unprocessable entity when adding #{user} to organization #{org} with role #{role}: #{e.message}. This likely means the user blocked the invite, so we're ignoring them, but someone should check it."
+            return false
+          rescue Octokit::Forbidden => e # code 403
+            Entitlements.logger.warn "Forbidden from adding #{user} to organization #{org} with role #{role}: #{e.message}."
             return false
           end
 
