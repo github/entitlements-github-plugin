@@ -440,6 +440,33 @@ describe Entitlements::Service::GitHub do
       end
     end
 
+    context "run id header" do
+      let(:http) { Net::HTTP.new("github.fake", 443) }
+      let(:response) { instance_double(Net::HTTPOK, code: "200", body: "{}") }
+
+      before { subject.instance_variable_set(:@graphql_http, http) }
+
+      it "sends the CI run id when GITHUB_RUN_ID is set" do
+        stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345"))
+        expect(http).to receive(:request) do |request|
+          expect(request["X-Entitlements-Run-Id"]).to eq("12345")
+          response
+        end
+
+        subject.send(:graphql_http_post_real, "nonsense")
+      end
+
+      it "omits the header when GITHUB_RUN_ID is not set" do
+        stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID"))
+        expect(http).to receive(:request) do |request|
+          expect(request.key?("X-Entitlements-Run-Id")).to be(false)
+          response
+        end
+
+        subject.send(:graphql_http_post_real, "nonsense")
+      end
+    end
+
     it "discards a failed connection so the next request reconnects" do
       answer = { "foo" => "bar" }
       response = instance_double(Net::HTTPOK, code: "200", body: JSON.generate(answer))
