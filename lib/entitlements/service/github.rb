@@ -381,6 +381,8 @@ module Entitlements
         request = Net::HTTP::Post.new(uri)
         request.add_field("Authorization", "bearer #{token}")
         request.add_field("Content-Type", "application/json")
+        # Lets a proxy such as entitlements-caches tie each request to a CI run.
+        request.add_field("X-Entitlements-Run-Id", ENV["GITHUB_RUN_ID"]) if ENV["GITHUB_RUN_ID"]
         request.body = JSON.generate("query" => query)
 
         begin
