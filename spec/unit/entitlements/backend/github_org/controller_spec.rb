@@ -602,7 +602,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
         allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
 
         service = subject.send(:provider).github
-        expect(service).to receive(:members_and_roles_from_rest).and_return(answer2)
+        expect(service).to receive(:members_and_roles_from_graphql).and_return(answer2)
         expect(service).to receive(:pending_members).exactly(2).times.and_return(Set.new)
 
         expect(logger).to receive(:debug).with("Loading organization members and roles for kittensinc from cache")
