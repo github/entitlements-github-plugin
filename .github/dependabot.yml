@@ -40,6 +40,8 @@ updates:
     patterns: ["*"]
     ignore:
       - dependency-name: "github/internal-actions"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     multi-ecosystem-group: "all"
