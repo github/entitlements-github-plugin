@@ -603,7 +603,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
         service = subject.send(:provider).github
         expect(service).to receive(:members_and_roles_from_rest).and_return(answer2)
-        expect(service).to receive(:pending_members).exactly(2).times.and_return(Set.new)
+        expect(service).to receive(:pending_members).exactly(3).times.and_return(Set.new)
 
         expect(logger).to receive(:debug).with("Loading organization members and roles for kittensinc from cache")
         expect(logger).to receive(:debug).with("Currently kittensinc has 1 admin(s) and 2 member(s)")
@@ -845,6 +845,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
       github_double = instance_double(Entitlements::Backend::GitHubOrg::Provider)
       allow(subject).to receive(:provider).and_return(github_double)
+      allow(github_double).to receive(:pending_members).and_return(Set.new)
       allow(github_double).to receive(:read).with("cn=member,ou=kittensinc,ou=GitHub,dc=github,dc=com").and_return({})
       allow(github_double).to receive(:read).with("cn=admin,ou=kittensinc,ou=GitHub,dc=github,dc=com").and_return({})
 
@@ -868,6 +869,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
       github_double = instance_double(Entitlements::Backend::GitHubOrg::Provider)
       allow(subject).to receive(:provider).and_return(github_double)
+      allow(github_double).to receive(:pending_members).and_return(Set.new)
       dns.each do |dn|
         allow(github_double).to receive(:read).with(dn).and_return({})
       end
@@ -911,6 +913,7 @@ describe Entitlements::Backend::GitHubOrg::Controller do
 
       github_double = instance_double(Entitlements::Backend::GitHubOrg::Provider)
       allow(subject).to receive(:provider).and_return(github_double)
+      allow(github_double).to receive(:pending_members).and_return(Set.new)
       allow(github_double).to receive(:read).with(admin_dn).and_return(admin_group)
       allow(github_double).to receive(:read).with(member_dn).and_return(member_group)
 
