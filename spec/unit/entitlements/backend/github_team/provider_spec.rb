@@ -454,6 +454,30 @@ describe Entitlements::Backend::GitHubTeam::Provider do
     end
   end
 
+  describe "#auto_generate_ignored_users" do
+    it "returns lowercase non-members and does not enumerate organization membership" do
+      entitlement_group = instance_double(
+        Entitlements::Models::Group,
+        member_strings: Set.new(%w[SnowShoe RUSSIAN_BLUE PendingCat])
+      )
+      allow(subject).to receive(:github).and_return(github)
+      expect(github).not_to receive(:org_members)
+      expect(github).to receive(:org_member?).with("snowshoe").and_return(true)
+      expect(github).to receive(:org_member?).with("russian_blue").and_return(false)
+      expect(github).to receive(:org_member?).with("pendingcat").and_return(false)
+
+      expect(subject.auto_generate_ignored_users(entitlement_group)).to eq(Set.new(%w[russian_blue pendingcat]))
+    end
+
+    it "returns an empty set for an empty team" do
+      entitlement_group = instance_double(Entitlements::Models::Group, member_strings: Set.new)
+      allow(subject).to receive(:github).and_return(github)
+      expect(github).not_to receive(:org_member?)
+
+      expect(subject.auto_generate_ignored_users(entitlement_group)).to eq(Set.new)
+    end
+  end
+
   describe "#create_github_team_group" do
     it "returns a new empty team" do
       entitlement_group = Entitlements::Models::Group.new(

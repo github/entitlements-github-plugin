@@ -27,6 +27,7 @@ describe Entitlements::Backend::GitHubTeam::Controller do
       "RUSSIANBLue" => "member"
     }
   end
+  let(:org_member_set) { Set.new(org_member_hash.keys.map(&:downcase)) }
 
   describe "#calculate" do
     let(:russian_blue_team) do
@@ -123,7 +124,8 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         allow(dotcom_obj).to receive(:org).and_return("kittensinc")
         allow(dotcom_obj).to receive(:read_team).with(russian_blue_group).and_return(russian_blue_team)
         allow(dotcom_obj).to receive(:read_team).with(snowshoe_group).and_return(snowshoe_team)
-        allow(dotcom_obj).to receive(:org_members).and_return(org_member_hash)
+        expect(dotcom_obj).not_to receive(:org_members)
+        allow(dotcom_obj).to receive(:org_member?) { |username| org_member_set.include?(username) }
         allow(dotcom_obj).to receive(:from_predictive_cache?).and_return(false)
 
         expect(logger).to receive(:debug).with("Loaded cn=russian-blues,ou=kittensinc,ou=GitHub,dc=github,dc=com (id=1001) with 2 member(s)")
@@ -169,7 +171,8 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         allow(dotcom_obj).to receive(:identifier).and_return("github.com")
         allow(dotcom_obj).to receive(:org).and_return("kittensinc")
         allow(dotcom_obj).to receive(:read_team).with(russian_blue_group).and_return(russian_blue_team)
-        allow(dotcom_obj).to receive(:org_members).and_return(org_member_hash)
+        expect(dotcom_obj).not_to receive(:org_members)
+        allow(dotcom_obj).to receive(:org_member?) { |username| org_member_set.include?(username) }
         allow(dotcom_obj).to receive(:from_predictive_cache?).and_return(false)
 
         expect(logger).to receive(:debug).with("Loaded cn=russian-blues,ou=kittensinc,ou=GitHub,dc=github,dc=com (id=1001) with 2 member(s)")
@@ -218,7 +221,8 @@ describe Entitlements::Backend::GitHubTeam::Controller do
         allow(dotcom_obj).to receive(:ou).and_return("GitHub")
         allow(dotcom_obj).to receive(:read_team).with(russian_blue_group).and_return(nil)
         allow(dotcom_obj).to receive(:read_team).with(snowshoe_group).and_return(snowshoe_team)
-        allow(dotcom_obj).to receive(:org_members).and_return(org_member_hash)
+        expect(dotcom_obj).not_to receive(:org_members)
+        allow(dotcom_obj).to receive(:org_member?) { |username| org_member_set.include?(username) }
         allow(dotcom_obj).to receive(:from_predictive_cache?).and_return(false)
 
         expect(logger).to receive(:debug).with("Loaded cn=snowshoes,ou=kittensinc,ou=GitHub,dc=github,dc=com (id=1002) with 2 member(s)")
