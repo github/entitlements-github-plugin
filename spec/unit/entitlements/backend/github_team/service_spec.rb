@@ -708,6 +708,24 @@ describe Entitlements::Backend::GitHubTeam::Service do
       end
     end
 
+    context "more pages than allowed" do
+      it "raises instead of returning a partial result" do
+        allow(subject).to receive(:max_graphql_results).and_return(2)
+        allow(subject).to receive(:max_graphql_pages).and_return(1)
+
+        page = JSON.generate("data" => { "organization" => { "team" => { "databaseId" => 593_721, "members" => { "edges" => [
+          { "node" => { "login" => "highlander" }, "role" => "MEMBER", "cursor" => "Y3Vyc29yOnYyOpHNNS0=" },
+          { "node" => { "login" => "blackmanx" }, "role" => "MEMBER", "cursor" => "Y3Vyc29yOnYyOpHNTkI=" }
+        ] } } } })
+        stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 200, body: page)
+
+        expect(logger).to receive(:fatal).with("Abort reading members of team kittensinc/grumpy-cat: more than 1 pages of results")
+        expect do
+          subject.send(:graphql_team_data, "grumpy-cat")
+        end.to raise_error(RuntimeError, "GraphQL pagination limit exceeded")
+      end
+    end
+
     context "team found, single page of results" do
       let(:graphql_dotcom_response) do
         <<~EOF

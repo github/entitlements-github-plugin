@@ -49,7 +49,7 @@ describe Entitlements::Service::GitHub do
     end
 
     it "queries GraphQL and converts Enum to Entitlements key" do
-      expect(subject).to receive(:members_and_roles_from_rest).and_return(members_and_roles)
+      expect(subject).to receive(:members_and_roles_from_graphql).and_return(members_and_roles)
       expect(subject.org_members).to eq(
                                        "alice" => "member", "bob" => "admin", "charles" => "member", "david" => "member"
                                      )
@@ -102,7 +102,7 @@ describe Entitlements::Service::GitHub do
       it "returns false" do
         cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil } }, invalid: Set.new }
 
-        expect(subject).to receive(:members_and_roles_from_rest).and_return(answer)
+        expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer)
 
         expect(subject.org_members_from_predictive_cache?).to eq(false)
       end
@@ -112,7 +112,7 @@ describe Entitlements::Service::GitHub do
       it "returns true" do
         cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil }, member_dn => { members:, metadata: nil } }, invalid: Set.new }
 
-        expect(subject).not_to receive(:members_and_roles_from_rest)
+        expect(subject).not_to receive(:members_and_roles_from_graphql)
 
         expect(subject.org_members_from_predictive_cache?).to eq(true)
       end
@@ -136,7 +136,7 @@ describe Entitlements::Service::GitHub do
       answer_2 = answer.dup
       answer_2["ragamuffin"] = "ADMIN"
 
-      expect(subject).to receive(:members_and_roles_from_rest).and_return(answer_2)
+      expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer_2)
       expect(logger).to receive(:debug).with("Invalidating cache entries for cn=(admin|member),ou=kittensinc,ou=GitHub,dc=github,dc=fake")
       expect(logger).to receive(:debug).with("members(cn=admin,ou=kittensinc,ou=GitHub,dc=github,dc=fake): DN has been marked invalid in cache")
       expect(logger).to receive(:debug).with("members(cn=member,ou=kittensinc,ou=GitHub,dc=github,dc=fake): DN has been marked invalid in cache")
@@ -160,7 +160,7 @@ describe Entitlements::Service::GitHub do
       it "logs and returns data from cache" do
         cache[:predictive_state] = { by_dn: { admin_dn => { members: Set.new(admins), metadata: nil }, member_dn => { members: Set.new(members), metadata: nil } }, invalid: Set.new }
 
-        expect(subject).not_to receive(:members_and_roles_from_rest)
+        expect(subject).not_to receive(:members_and_roles_from_graphql)
         expect(logger).to receive(:debug).with("Loading organization members and roles for kittensinc from cache")
 
         result = subject.send(:members_and_roles_from_graphql_or_cache)
@@ -174,7 +174,7 @@ describe Entitlements::Service::GitHub do
 
         expect(logger).to receive(:debug).with("members(#{admin_dn}): DN does not exist in cache")
         expect(logger).to receive(:debug).with("members(#{member_dn}): DN does not exist in cache")
-        expect(subject).to receive(:members_and_roles_from_rest).and_return(answer)
+        expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer)
 
         result = subject.send(:members_and_roles_from_graphql_or_cache)
         expect(result).to eq([answer, false])
@@ -213,6 +213,20 @@ describe Entitlements::Service::GitHub do
         stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 404)
         expect(logger).to receive(:fatal).with(/Abort due to GraphQL failure on /)
         expect { subject.send(:members_and_roles_from_graphql) }.to raise_error(/GraphQL query failure/)
+      end
+    end
+
+    context "more pages than allowed" do
+      it "raises instead of returning a partial result" do
+        allow(subject).to receive(:max_graphql_results).and_return(3)
+        allow(subject).to receive(:max_graphql_pages).and_return(1)
+
+        stub_request(:post, "https://github.fake/api/v3/graphql").
+          with(body: /\(first: 3\)/).
+          to_return(status: 200, body: File.read(fixture("graphql-output/organization-members-page1.json")))
+
+        expect(logger).to receive(:fatal).with("Abort reading organization members of kittensinc: more than 1 pages of results")
+        expect { subject.send(:members_and_roles_from_graphql) }.to raise_error("GraphQL pagination limit exceeded")
       end
     end
   end
@@ -313,6 +327,20 @@ describe Entitlements::Service::GitHub do
         stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 404)
         expect(logger).to receive(:fatal).with(/Abort due to GraphQL failure on /)
         expect { subject.send(:pending_members_from_graphql) }.to raise_error(/GraphQL query failure/)
+      end
+    end
+
+    context "more pages than allowed" do
+      it "raises instead of returning a partial result" do
+        allow(subject).to receive(:max_graphql_results).and_return(3)
+        allow(subject).to receive(:max_graphql_pages).and_return(1)
+
+        stub_request(:post, "https://github.fake/api/v3/graphql").
+          with(body: /\(first: 3\)/).
+          to_return(status: 200, body: File.read(fixture("graphql-output/pending-members-page1.json")))
+
+        expect(logger).to receive(:fatal).with("Abort reading pending members of kittensinc: more than 1 pages of results")
+        expect { subject.send(:pending_members_from_graphql) }.to raise_error("GraphQL pagination limit exceeded")
       end
     end
   end
