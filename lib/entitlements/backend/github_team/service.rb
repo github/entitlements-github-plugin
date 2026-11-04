@@ -4,6 +4,7 @@ require_relative "models/team"
 require_relative "../../service/github"
 
 require "base64"
+require "json"
 require "set"
 
 module Entitlements
@@ -15,6 +16,9 @@ module Entitlements
         C = ::Contracts
 
         class TeamNotFound < RuntimeError; end
+
+        GRAPHQL_TEAM_BATCH_SIZE = 10
+        MAX_GRAPHQL_TEAM_PAGES = 100
 
         # Constructor.
         #
@@ -47,86 +51,62 @@ module Entitlements
         # Returns a Entitlements::Backend::GitHubTeam::Models::Team or nil if the team does not exist
         Contract Entitlements::Models::Group => C::Maybe[Entitlements::Backend::GitHubTeam::Models::Team]
         def read_team(entitlement_group)
-          team_identifier = entitlement_group.cn.downcase
-          @team_cache[team_identifier] ||= begin
-            dn = "cn=#{team_identifier},#{ou}"
-            begin
-              entitlement_metadata = entitlement_group.metadata
-            rescue Entitlements::Models::Group::NoMetadata
-              entitlement_metadata = nil
+          read_teams([entitlement_group]).fetch(entitlement_group.cn.downcase)
+        end
+
+        # Read multiple teams, using predictive state where valid and bounded GraphQL
+        # batches for the teams that require authoritative state.
+        #
+        # entitlement_groups - Array of desired Entitlements::Models::Group objects.
+        #
+        # Returns a Hash keyed by lower-case team slug.
+        Contract C::ArrayOf[Entitlements::Models::Group] => C::HashOf[String => C::Maybe[Entitlements::Backend::GitHubTeam::Models::Team]]
+        def read_teams(entitlement_groups)
+          result = {}
+          authoritative_groups = []
+
+          entitlement_groups.each do |entitlement_group|
+            team_identifier = entitlement_group.cn.downcase
+            if @team_cache.key?(team_identifier)
+              result[team_identifier] = @team_cache.fetch(team_identifier)[:value]
+              next
             end
 
-            if (cached_members = Entitlements::Data::Groups::Cached.members(dn))
-              Entitlements.logger.debug "Loading GitHub team #{identifier}:#{org}/#{team_identifier} from cache"
-
-              cached_metadata = Entitlements::Data::Groups::Cached.metadata(dn)
-              # If both the cached and entitlement metadata are nil, our team metadata is nil
-              # If one of the cached or entitlement metadata is nil, we use the other populated metadata hash as-is
-              # If both cached and entitlement metadata exist, we combine the two hashes with the cached metadata taking precedence
-              #
-              # The reason we do this is because an entitlement file should be 1:1 to a GitHub Team. However,
-              # entitlements files allow for metadata tags and the GitHub.com Team does not have a place to store those.
-              # Therefore, we must combine any existing entitlement metadata entries into the Team metadata hash
-              if cached_metadata.nil?
-                team_metadata = entitlement_metadata
-              elsif entitlement_metadata.nil?
-                team_metadata = cached_metadata
-              else
-                # Always merge the current state metadata (cached or API call) into the entitlement metadata, so that the current state takes precedent
-                team_metadata = entitlement_metadata.merge(cached_metadata)
-              end
-
-              team = Entitlements::Backend::GitHubTeam::Models::Team.new(
-                team_id: -1,
-                team_name: team_identifier,
-                members: cached_members,
-                ou:,
-                metadata: team_metadata
-              )
-
-              { cache: true, value: team }
+            predictive_team = team_from_predictive_cache(entitlement_group)
+            if predictive_team
+              @team_cache[team_identifier] = { cache: true, value: predictive_team }
+              result[team_identifier] = predictive_team
             else
               Entitlements.logger.debug "Loading GitHub team #{identifier}:#{org}/#{team_identifier}"
-
-              begin
-                teamdata = graphql_team_data(team_identifier)
-                # The entitlement metadata may have GitHub.com Team metadata which it wants to set, so we must
-                # overwrite that metadata with what we get from the API
-                if teamdata[:parent_team_name].nil?
-                  team_metadata = entitlement_metadata
-                else
-                  parent_team_metadata = {
-                    "parent_team_name" => teamdata[:parent_team_name]
-                  }
-                  if entitlement_metadata.nil?
-                    team_metadata = parent_team_metadata
-                  else
-                    # Always merge the current state metadata (cached or API call) into the entitlement metadata, so that the current state takes precedent
-                    team_metadata = entitlement_metadata.merge(parent_team_metadata)
-                  end
-                end
-
-                maintainers = teamdata[:members].select { |u| teamdata[:roles][u] == "maintainer" }
-                team_metadata ||= {}
-                team_metadata = team_metadata.merge({ "team_maintainers" => maintainers.any? ? maintainers.join(",") : nil })
-
-                team = Entitlements::Backend::GitHubTeam::Models::Team.new(
-                  team_id: teamdata[:team_id],
-                  team_name: team_identifier,
-                  members: Set.new(teamdata[:members]),
-                  ou:,
-                  metadata: team_metadata
-                )
-              rescue TeamNotFound
-                Entitlements.logger.warn "Team #{team_identifier} does not exist in this GitHub.com organization. If applied, the team will be created."
-                return nil
-              end
-
-              { cache: false, value: team }
+              authoritative_groups << entitlement_group
             end
           end
 
-          @team_cache[team_identifier][:value]
+          unless authoritative_groups.empty?
+            team_data = if authoritative_groups.one?
+                          team_identifier = authoritative_groups.first.cn.downcase
+                          begin
+                            { team_identifier => graphql_team_data(team_identifier) }
+                          rescue TeamNotFound
+                            { team_identifier => nil }
+                          end
+                        else
+                          graphql_team_data_batch(authoritative_groups.map { |group| group.cn.downcase })
+                        end
+
+            authoritative_groups.each do |entitlement_group|
+              team_identifier = entitlement_group.cn.downcase
+              data = team_data.fetch(team_identifier)
+              team = data && team_from_graphql_data(entitlement_group, data)
+              unless team
+                Entitlements.logger.warn "Team #{team_identifier} does not exist in this GitHub.com organization. If applied, the team will be created."
+              end
+              @team_cache[team_identifier] = { cache: false, value: team }
+              result[team_identifier] = team
+            end
+          end
+
+          result
         end
 
         # Determine whether the most recent entry came from the predictive cache or an actual
@@ -361,65 +341,187 @@ module Entitlements
         Contract String => { members: C::ArrayOf[String], team_id: Integer, parent_team_name: C::Or[String, nil],
                              roles: C::HashOf[String => String] }
         def graphql_team_data(team_slug)
-          cursor = nil
-          team_id = nil
-          result = []
-          roles = {}
-          sanity_counter = 0
+          result = graphql_team_data_batch([team_slug]).fetch(team_slug)
+          raise TeamNotFound, "Requested team #{team_slug} does not exist in #{org}!" if result.nil?
 
-          while sanity_counter < 100
-            sanity_counter += 1
-            first_str = cursor.nil? ? "first: #{max_graphql_results}" : "first: #{max_graphql_results}, after: \"#{cursor}\""
-            query = "{
-              organization(login: \"#{org}\") {
-                team(slug: \"#{team_slug}\") {
-                  databaseId
-                  parentTeam {
-                    slug
-                  }
-                  members(#{first_str}, membership: IMMEDIATE) {
-                    edges {
-                      node {
-                        login
-                      }
-                      role
-                      cursor
-                    }
-                  }
-                }
-              }
-            }".gsub(/\n\s+/, "\n")
+          result
+        end
 
-            response = graphql_http_post(query)
-            unless response[:code] == 200
-              Entitlements.logger.fatal "Abort due to GraphQL failure on #{query.inspect}"
-              raise "GraphQL query failure"
+        def graphql_team_data_batch(team_slugs)
+          states = team_slugs.to_h do |team_slug|
+            [team_slug, { members: [], roles: {}, team_id: nil, parent_team_name: nil, cursor: nil, pages: 0 }]
+          end
+          pending_team_slugs = team_slugs
+
+          until pending_team_slugs.empty?
+            next_pending_team_slugs = []
+
+            pending_team_slugs.each_slice(graphql_team_batch_size) do |batch|
+              alias_to_team = batch.each_with_index.to_h { |team_slug, index| ["team#{index}", team_slug] }
+              query = graphql_team_batch_query(alias_to_team, states)
+              response = graphql_http_post(query)
+              unless response[:code] == 200
+                Entitlements.logger.fatal "Abort due to GraphQL failure on #{query.inspect}"
+                raise "GraphQL query failure"
+              end
+
+              response_data = response[:data].fetch("data")
+              organization = response_data.fetch("organization")
+              raise "GraphQL response missing organization #{org}" if organization.nil?
+
+              log_graphql_rate_limit(response_data["rateLimit"])
+
+              alias_to_team.each do |team_alias, team_slug|
+                state = states.fetch(team_slug)
+                team = organization.fetch(team_alias)
+                if team.nil?
+                  raise "GitHub team #{team_slug} disappeared during pagination" if state[:pages].positive?
+
+                  states[team_slug] = nil
+                  next
+                end
+
+                state[:pages] += 1
+                team_id = team.fetch("databaseId")
+                if state[:team_id] && state[:team_id] != team_id
+                  raise "GitHub team #{team_slug} changed database ID during pagination"
+                end
+                state[:team_id] = team_id
+                state[:parent_team_name] = team.dig("parentTeam", "slug")
+
+                edges = team.fetch("members").fetch("edges")
+                edges.each do |edge|
+                  username = edge.fetch("node").fetch("login").downcase
+                  state[:members] << username
+                  state[:roles][username] = edge.fetch("role").downcase
+                end
+
+                next unless edges.size == max_graphql_results
+
+                cursor = edges.last.fetch("cursor")
+                raise "GitHub team #{team_slug} returned a full page without a cursor" if cursor.nil?
+                if state[:pages] >= MAX_GRAPHQL_TEAM_PAGES
+                  raise "GitHub team #{team_slug} exceeded the #{MAX_GRAPHQL_TEAM_PAGES}-page GraphQL limit"
+                end
+
+                state[:cursor] = cursor
+                next_pending_team_slugs << team_slug
+              end
             end
 
-            team = response[:data].fetch("data").fetch("organization").fetch("team")
-            raise TeamNotFound, "Requested team #{team_slug} does not exist in #{org}!" if team.nil?
-
-            team_id = team.fetch("databaseId")
-            parent_team_name = team.dig("parentTeam", "slug")
-
-            edges = team.fetch("members").fetch("edges")
-            break unless edges.any?
-
-            buffer = edges.map { |e| e.fetch("node").fetch("login").downcase }
-            result.concat buffer
-
-            edges.each do |e|
-              role = e.fetch("role").downcase
-              roles[e.fetch("node").fetch("login").downcase] = role
-            end
-
-            cursor = edges.last.fetch("cursor")
-            next if cursor && buffer.size == max_graphql_results
-
-            break
+            pending_team_slugs = next_pending_team_slugs
           end
 
-          { members: result, team_id:, parent_team_name:, roles: }
+          states.transform_values do |state|
+            next if state.nil?
+
+            state.slice(:members, :roles, :team_id, :parent_team_name)
+          end
+        end
+
+        def graphql_team_batch_query(alias_to_team, states)
+          team_fields = alias_to_team.map do |team_alias, team_slug|
+            cursor = states.fetch(team_slug)[:cursor]
+            pagination = "first: #{max_graphql_results}"
+            pagination += ", after: #{graphql_string_literal(cursor)}" if cursor
+            "#{team_alias}: team(slug: #{graphql_string_literal(team_slug)}) {
+              databaseId
+              parentTeam {
+                slug
+              }
+              members(#{pagination}, membership: IMMEDIATE) {
+                edges {
+                  node {
+                    login
+                  }
+                  role
+                  cursor
+                }
+              }
+            }"
+          end.join("\n")
+
+          "query {
+            rateLimit {
+              cost
+              remaining
+              resetAt
+            }
+            organization(login: #{graphql_string_literal(org)}) {
+              #{team_fields}
+            }
+          }".gsub(/\n\s+/, "\n")
+        end
+
+        Contract String => String
+        def graphql_string_literal(value)
+          JSON.generate(value)
+        end
+
+        def graphql_team_batch_size
+          GRAPHQL_TEAM_BATCH_SIZE
+        end
+
+        def log_graphql_rate_limit(rate_limit)
+          return if rate_limit.nil?
+
+          Entitlements.logger.debug(
+            "GitHub GraphQL team batch cost=#{rate_limit['cost']} remaining=#{rate_limit['remaining']} reset_at=#{rate_limit['resetAt']}"
+          )
+        end
+
+        def team_from_predictive_cache(entitlement_group)
+          team_identifier = entitlement_group.cn.downcase
+          dn = "cn=#{team_identifier},#{ou}"
+          cached_members = Entitlements::Data::Groups::Cached.members(dn)
+          return if cached_members.nil?
+
+          Entitlements.logger.debug "Loading GitHub team #{identifier}:#{org}/#{team_identifier} from cache"
+          cached_metadata = Entitlements::Data::Groups::Cached.metadata(dn)
+          entitlement_metadata = metadata_from_entitlement(entitlement_group)
+          team_metadata = if cached_metadata.nil?
+                            entitlement_metadata
+                          elsif entitlement_metadata.nil?
+                            cached_metadata
+                          else
+                            entitlement_metadata.merge(cached_metadata)
+                          end
+
+          Entitlements::Backend::GitHubTeam::Models::Team.new(
+            team_id: -1,
+            team_name: team_identifier,
+            members: cached_members,
+            ou:,
+            metadata: team_metadata
+          )
+        end
+
+        def team_from_graphql_data(entitlement_group, teamdata)
+          team_identifier = entitlement_group.cn.downcase
+          entitlement_metadata = metadata_from_entitlement(entitlement_group)
+          parent_team_name = teamdata[:parent_team_name]
+          team_metadata = if parent_team_name.nil?
+                            entitlement_metadata
+                          else
+                            (entitlement_metadata || {}).merge("parent_team_name" => parent_team_name)
+                          end
+
+          maintainers = teamdata[:members].select { |username| teamdata[:roles][username] == "maintainer" }
+          team_metadata = (team_metadata || {}).merge("team_maintainers" => maintainers.any? ? maintainers.join(",") : nil)
+
+          Entitlements::Backend::GitHubTeam::Models::Team.new(
+            team_id: teamdata[:team_id],
+            team_name: team_identifier,
+            members: Set.new(teamdata[:members]),
+            ou:,
+            metadata: team_metadata
+          )
+        end
+
+        def metadata_from_entitlement(entitlement_group)
+          entitlement_group.metadata
+        rescue Entitlements::Models::Group::NoMetadata
+          nil
         end
 
         # Ensure that the given team ID actually matches up to the team slug on GitHub. This is in place

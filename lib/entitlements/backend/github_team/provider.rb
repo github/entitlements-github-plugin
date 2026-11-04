@@ -30,6 +30,20 @@ module Entitlements
           @github_team_cache = {}
         end
 
+        # Populate the provider cache for a collection of desired teams.
+        #
+        # entitlement_groups - Array of Entitlements::Models::Group objects.
+        #
+        # Returns nothing.
+        Contract C::ArrayOf[Entitlements::Models::Group] => nil
+        def prefetch(entitlement_groups)
+          github.read_teams(entitlement_groups).each do |team_name, github_team|
+            log_loaded_team(github_team) if github_team
+            @github_team_cache[team_name] = github_team
+          end
+          nil
+        end
+
         # Read in a specific GitHub.com Team and enumerate its members. Results are cached
         # for future runs.
         #
@@ -39,15 +53,12 @@ module Entitlements
         Contract Entitlements::Models::Group => C::Maybe[Entitlements::Models::Group]
         def read(entitlement_group)
           slug = Entitlements::Util::Util.any_to_cn(entitlement_group.cn.downcase)
-          return @github_team_cache[slug] if @github_team_cache[slug]
+          return @github_team_cache[slug] if @github_team_cache.key?(slug)
 
           github_team = github.read_team(entitlement_group)
 
-          # We should not cache a team which does not exist
-          return nil if github_team.nil?
-
-          Entitlements.logger.debug "Loaded #{github_team.team_dn} (id=#{github_team.team_id}) with #{github_team.member_strings.count} member(s)"
-          @github_team_cache[github_team.team_name] = github_team
+          log_loaded_team(github_team) if github_team
+          @github_team_cache[slug] = github_team
         end
 
         # Dry run of committing changes. Returns a list of users added or removed.
@@ -150,6 +161,12 @@ module Entitlements
         end
 
         private
+
+        Contract Entitlements::Backend::GitHubTeam::Models::Team => nil
+        def log_loaded_team(github_team)
+          Entitlements.logger.debug "Loaded #{github_team.team_dn} (id=#{github_team.team_id}) with #{github_team.member_strings.count} member(s)"
+          nil
+        end
 
         # Construct an Entitlements::Models::Group for a new group and team
         #
