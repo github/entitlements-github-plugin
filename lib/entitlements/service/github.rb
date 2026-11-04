@@ -15,6 +15,7 @@ module Entitlements
 
       # This is a limitation of the GitHub API
       MAX_GRAPHQL_RESULTS = 100
+      MAX_GRAPHQL_PAGES = 100
 
       # Retries to smooth over transient network blips
       MAX_GRAPHQL_RETRIES = 3
@@ -215,8 +216,9 @@ module Entitlements
         result = {}
         sanity_counter = 0
 
-        while sanity_counter < 100
+        loop do
           sanity_counter += 1
+          raise_if_too_many_pages(sanity_counter, "organization members of #{org}")
           first_str = cursor.nil? ? "first: #{max_graphql_results}" : "first: #{max_graphql_results}, after: \"#{cursor}\""
           query = "{
             organization(login: \"#{org}\") {
@@ -294,8 +296,9 @@ module Entitlements
         result = Set.new
         sanity_counter = 0
 
-        while sanity_counter < 100
+        loop do
           sanity_counter += 1
+          raise_if_too_many_pages(sanity_counter, "pending members of #{org}")
           first_str = cursor.nil? ? "first: #{max_graphql_results}" : "first: #{max_graphql_results}, after: \"#{cursor}\""
           query = "{
             organization(login: \"#{org}\") {
@@ -476,6 +479,35 @@ module Entitlements
         MAX_GRAPHQL_RESULTS
       end
       # :nocov:
+
+      # Helper method: Determine the maximum number of pages to read from a paginated
+      # GraphQL query. Stubbed in tests.
+      #
+      # Takes no arguments.
+      #
+      # Returns an Integer.
+      # :nocov:
+      Contract C::None => Integer
+      def max_graphql_pages
+        MAX_GRAPHQL_PAGES
+      end
+      # :nocov:
+
+      # Helper method: Raise rather than return a truncated result when a paginated
+      # GraphQL query needs more pages than allowed. A partial list of members would
+      # cause entitlements to skip removals for anyone not returned.
+      #
+      # page - Integer number of the page about to be requested.
+      # what - String describing what is being read, for the error message.
+      #
+      # Returns nothing.
+      Contract Integer, String => nil
+      def raise_if_too_many_pages(page, what)
+        return if page <= max_graphql_pages
+
+        Entitlements.logger.fatal "Abort reading #{what}: more than #{max_graphql_pages} pages of results"
+        raise "GraphQL pagination limit exceeded"
+      end
     end
   end
 end

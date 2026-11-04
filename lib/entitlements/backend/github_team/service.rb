@@ -363,12 +363,14 @@ module Entitlements
         def graphql_team_data(team_slug)
           cursor = nil
           team_id = nil
+          parent_team_name = nil
           result = []
           roles = {}
           sanity_counter = 0
 
-          while sanity_counter < 100
+          loop do
             sanity_counter += 1
+            raise_if_too_many_pages(sanity_counter, "members of team #{org}/#{team_slug}")
             first_str = cursor.nil? ? "first: #{max_graphql_results}" : "first: #{max_graphql_results}, after: \"#{cursor}\""
             query = "{
               organization(login: \"#{org}\") {

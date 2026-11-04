@@ -215,6 +215,20 @@ describe Entitlements::Service::GitHub do
         expect { subject.send(:members_and_roles_from_graphql) }.to raise_error(/GraphQL query failure/)
       end
     end
+
+    context "more pages than allowed" do
+      it "raises instead of returning a partial result" do
+        allow(subject).to receive(:max_graphql_results).and_return(3)
+        allow(subject).to receive(:max_graphql_pages).and_return(1)
+
+        stub_request(:post, "https://github.fake/api/v3/graphql").
+          with(body: /\(first: 3\)/).
+          to_return(status: 200, body: File.read(fixture("graphql-output/organization-members-page1.json")))
+
+        expect(logger).to receive(:fatal).with("Abort reading organization members of kittensinc: more than 1 pages of results")
+        expect { subject.send(:members_and_roles_from_graphql) }.to raise_error("GraphQL pagination limit exceeded")
+      end
+    end
   end
 
   describe "#members_and_roles_from_rest" do
@@ -313,6 +327,20 @@ describe Entitlements::Service::GitHub do
         stub_request(:post, "https://github.fake/api/v3/graphql").to_return(status: 404)
         expect(logger).to receive(:fatal).with(/Abort due to GraphQL failure on /)
         expect { subject.send(:pending_members_from_graphql) }.to raise_error(/GraphQL query failure/)
+      end
+    end
+
+    context "more pages than allowed" do
+      it "raises instead of returning a partial result" do
+        allow(subject).to receive(:max_graphql_results).and_return(3)
+        allow(subject).to receive(:max_graphql_pages).and_return(1)
+
+        stub_request(:post, "https://github.fake/api/v3/graphql").
+          with(body: /\(first: 3\)/).
+          to_return(status: 200, body: File.read(fixture("graphql-output/pending-members-page1.json")))
+
+        expect(logger).to receive(:fatal).with("Abort reading pending members of kittensinc: more than 1 pages of results")
+        expect { subject.send(:pending_members_from_graphql) }.to raise_error("GraphQL pagination limit exceeded")
       end
     end
   end
