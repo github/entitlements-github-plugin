@@ -198,6 +198,19 @@ describe Entitlements::Service::GitHub do
       expect(subject).not_to receive(:members_and_roles_from_graphql)
       expect(subject.send(:members_and_roles_from_api)).to eq(answer)
     end
+
+    it "uses REST for a .ghe.com org when GITHUB_RUN_ID is set" do
+      stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345"))
+      ghe_com = described_class.new(
+        addr: "https://api.kittensinc.ghe.com",
+        org: "kittensinc",
+        token: "GoPackGo",
+        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake"
+      )
+      expect(ghe_com).to receive(:members_and_roles_from_rest).and_return(answer)
+      expect(ghe_com).not_to receive(:members_and_roles_from_graphql)
+      expect(ghe_com.send(:members_and_roles_from_api)).to eq(answer)
+    end
   end
 
   describe "#members_and_roles_from_graphql" do
