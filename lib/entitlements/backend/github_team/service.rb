@@ -197,9 +197,8 @@ module Entitlements
               desired_parent_team_id = team_by_name(org_name: org, team_name: desired_metadata["parent_team_name"])[:id]
               unless desired_parent_team_id.nil?
                 # TODO: I'm hard-coding a block for deletes, for now. I'm doing that by making sure we dont set the desired parent_team_id to nil for teams where it is already set
-                update_team(team: current_state, metadata: { parent_team_id: desired_parent_team_id })
+                changed_parent_team = update_team(team: current_state, metadata: { parent_team_id: desired_parent_team_id })
               end
-              changed_parent_team = true
             end
           end
 
@@ -329,7 +328,7 @@ module Entitlements
 
           true
         rescue Octokit::UnprocessableEntity => e
-          Entitlements.logger.debug "update_team(team=#{team.team_name}) ERROR - #{e.message}"
+          Entitlements.logger.warn "update_team(team=#{team.team_name}) ERROR - #{e.message}"
           false
         end
 
