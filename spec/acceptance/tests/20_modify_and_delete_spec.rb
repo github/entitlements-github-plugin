@@ -47,6 +47,11 @@ describe Entitlements do
     expect(@result.stderr).not_to match(/Please add team_id=\d+ for team/)
   end
 
+  it "changes the parent of an existing GitHub team" do
+    expect(@result.stderr).to match(log("INFO", "CHANGE github_parent_team from employees to grumpy-cat for cn=child-team,ou=meowsister,ou=GitHub,dc=github,dc=fake in meowsister"))
+    expect(@result.stderr).to match(log("DEBUG", Regexp.escape("sync_team(child-team=7): Parent team change found - From employees to grumpy-cat")))
+  end
+
   it "logs appropriate informational messages to STDERR for memberOf" do
     expect(@result.stderr).to match(log("DEBUG", "Calculating memberOf attributes for configured groups"))
     expect(@result.stderr).not_to match(log("INFO", "Person blackmanx attribute change:"))
@@ -89,7 +94,7 @@ describe Entitlements do
     # Hey there! If you are here because this test is failing, please don't blindly update the number.
     # Figure out what change you made that caused this number to increase or decrease, and add log checks
     # for it above.
-    expect(@result.stderr).to match(log("INFO", "Successfully applied 28 change\\(s\\)!"))
+    expect(@result.stderr).to match(log("INFO", "Successfully applied 29 change\\(s\\)!"))
   end
 
   it "has no 'DID NOT APPLY' warnings" do

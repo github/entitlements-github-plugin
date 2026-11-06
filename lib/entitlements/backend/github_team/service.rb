@@ -56,10 +56,19 @@ module Entitlements
               entitlement_metadata = nil
             end
 
-            if (cached_members = Entitlements::Data::Groups::Cached.members(dn))
+            cached_members = Entitlements::Data::Groups::Cached.members(dn)
+            cached_metadata = Entitlements::Data::Groups::Cached.metadata(dn) if cached_members
+
+            # The cache can't tell us the current parent unless it records one. When the entitlement
+            # wants a parent, read the team from the API rather than assume the parent is already set.
+            if cached_members && entitlement_metadata&.dig("parent_team_name") && !cached_metadata&.key?("parent_team_name")
+              Entitlements.logger.debug "Parent team for GitHub team #{identifier}:#{org}/#{team_identifier} is not in the cache"
+              cached_members = nil
+            end
+
+            if cached_members
               Entitlements.logger.debug "Loading GitHub team #{identifier}:#{org}/#{team_identifier} from cache"
 
-              cached_metadata = Entitlements::Data::Groups::Cached.metadata(dn)
               # If both the cached and entitlement metadata are nil, our team metadata is nil
               # If one of the cached or entitlement metadata is nil, we use the other populated metadata hash as-is
               # If both cached and entitlement metadata exist, we combine the two hashes with the cached metadata taking precedence
@@ -91,23 +100,11 @@ module Entitlements
               begin
                 teamdata = graphql_team_data(team_identifier)
                 # The entitlement metadata may have GitHub.com Team metadata which it wants to set, so we must
-                # overwrite that metadata with what we get from the API
-                if teamdata[:parent_team_name].nil?
-                  team_metadata = entitlement_metadata
-                else
-                  parent_team_metadata = {
-                    "parent_team_name" => teamdata[:parent_team_name]
-                  }
-                  if entitlement_metadata.nil?
-                    team_metadata = parent_team_metadata
-                  else
-                    # Always merge the current state metadata (cached or API call) into the entitlement metadata, so that the current state takes precedent
-                    team_metadata = entitlement_metadata.merge(parent_team_metadata)
-                  end
-                end
+                # overwrite that metadata with what we get from the API. This includes a nil parent, so that
+                # a team without a parent doesn't look like it already has the parent the entitlement wants.
+                team_metadata = (entitlement_metadata || {}).merge("parent_team_name" => teamdata[:parent_team_name])
 
                 maintainers = teamdata[:members].select { |u| teamdata[:roles][u] == "maintainer" }
-                team_metadata ||= {}
                 team_metadata = team_metadata.merge({ "team_maintainers" => maintainers.any? ? maintainers.join(",") : nil })
 
                 team = Entitlements::Backend::GitHubTeam::Models::Team.new(

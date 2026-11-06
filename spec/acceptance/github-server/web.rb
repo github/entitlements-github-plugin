@@ -72,7 +72,7 @@ class FakeGitHubApi < Sinatra::Base
 
     if team_map.key?(slug)
       team_id = team_map[slug]["id"]
-      parent_team_name = team_map[slug][:parent_team_name]
+      parent_team_name = team_map[slug]["parent_team_name"]
 
       member_dir = File.join(BASE_DIR, "members", team_map[slug]["id"].to_s)
       members = Dir.glob(File.join(member_dir, "*")).sort.map { |filename| File.basename(filename) }

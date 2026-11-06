@@ -189,6 +189,101 @@ describe Entitlements::Backend::GitHubTeam::Provider do
     end
   end
 
+  describe "parent team changes through #diff and #commit" do
+    let(:team_identifier) { "grumpy-cats" }
+    let(:team_dn) { "cn=#{team_identifier},ou=kittensinc,ou=GitHub,dc=github,dc=fake" }
+    let(:team_members) { Set.new(%w[blackmanx ragamuffin russianblue]) }
+    let(:roles) { team_members.map { |u| [u, "member"] }.to_h }
+    let(:no_changes) { { added: Set.new, removed: Set.new } }
+    let(:add_parent) { { added: Set.new, removed: Set.new, metadata: { parent_team: "add" } } }
+    let(:group) do
+      Entitlements::Models::Group.new(
+        dn: team_dn,
+        description: ":smile_cat:",
+        members: team_members,
+        metadata: { "parent_team_name" => "parent-cats" }
+      )
+    end
+
+    before do
+      allow(subject).to receive(:github).and_return(github)
+    end
+
+    def api_team(parent_team_name)
+      { members: team_members.to_a, team_id: 1001, parent_team_name:, roles: }
+    end
+
+    def expect_parent_update
+      expect(github).to receive(:team_by_name).with(org_name: "kittensinc", team_name: "parent-cats").and_return(id: 2002)
+      expect(github).to receive(:update_team) do |team:, metadata:|
+        expect(team.team_id).to eq(1001)
+        expect(metadata).to eq(parent_team_id: 2002)
+        true
+      end
+    end
+
+    it "sets the parent when the team exists without one and there is no cache" do
+      expect(github).to receive(:graphql_team_data).with(team_identifier).once.and_return(api_team(nil))
+      expect_parent_update
+
+      expect(subject.diff(group)).to eq(add_parent)
+      expect(subject.commit(group)).to eq(true)
+    end
+
+    it "reads the team from the API when the cache doesn't record a parent" do
+      cache[:predictive_state] = { by_dn: { team_dn => { members: team_members, metadata: {} } }, invalid: Set.new }
+      expect(github).to receive(:graphql_team_data).with(team_identifier).once.and_return(api_team(nil))
+      expect_parent_update
+
+      expect(subject.diff(group)).to eq(add_parent)
+      expect(subject.commit(group)).to eq(true)
+    end
+
+    it "refreshes a cached parent that differs and sets the parent from the API state" do
+      cache[:predictive_state] = {
+        by_dn: { team_dn => { members: team_members, metadata: { "parent_team_name" => "old-parent" } } },
+        invalid: Set.new
+      }
+      expect(github).to receive(:graphql_team_data).with(team_identifier).once.and_return(api_team(nil))
+      expect_parent_update
+
+      expect(subject.diff(group)).to eq(add_parent)
+      expect(subject.commit(group)).to eq(true)
+    end
+
+    it "refreshes a cached parent that differs and makes no change when the API has the desired parent" do
+      cache[:predictive_state] = {
+        by_dn: { team_dn => { members: team_members, metadata: { "parent_team_name" => "old-parent" } } },
+        invalid: Set.new
+      }
+      expect(github).to receive(:graphql_team_data).with(team_identifier).once.and_return(api_team("parent-cats"))
+      expect(github).not_to receive(:update_team)
+
+      expect(subject.diff(group)).to eq(no_changes)
+      expect(subject.commit(group)).to eq(false)
+    end
+
+    it "uses the cache when it records the desired parent" do
+      cache[:predictive_state] = {
+        by_dn: { team_dn => { members: team_members, metadata: { "parent_team_name" => "parent-cats" } } },
+        invalid: Set.new
+      }
+      expect(github).not_to receive(:graphql_team_data)
+      expect(github).not_to receive(:update_team)
+
+      expect(subject.diff(group)).to eq(no_changes)
+    end
+
+    it "still ignores removing a parent when no parent is wanted" do
+      group_without_parent = Entitlements::Models::Group.new(dn: team_dn, description: ":smile_cat:", members: team_members)
+      expect(github).to receive(:graphql_team_data).with(team_identifier).once.and_return(api_team("parent-cats"))
+      expect(github).not_to receive(:update_team)
+
+      expect(subject.diff(group_without_parent)).to eq(added: Set.new, removed: Set.new, metadata: { parent_team: "remove" })
+      expect(subject.commit(group_without_parent)).to eq(false)
+    end
+  end
+
   describe "#change_ignored?" do
     let(:group1) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([snowshoe])) }
     let(:group2) { Entitlements::Models::Group.new(dn:, description: ":smile_cat:", members: Set.new([russian_blue])) }
