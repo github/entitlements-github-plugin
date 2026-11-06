@@ -183,7 +183,7 @@ module Entitlements
       end
 
       # Get data from the predictive updates cache if it's available and valid, or else get it
-      # from GraphQL API. This is a shim between readers and `members_and_roles_from_graphql`.
+      # from the API. This is a shim between readers and `members_and_roles_from_api`.
       #
       # Takes no parameters.
       #
@@ -194,13 +194,23 @@ module Entitlements
         member_from_cache = Entitlements::Data::Groups::Cached.members("cn=member,#{ou}")
 
         # If we do not have *both* admins and members, we need to call the API
-        return [members_and_roles_from_graphql, false] unless admin_from_cache && member_from_cache
+        return [members_and_roles_from_api, false] unless admin_from_cache && member_from_cache
 
         # Convert the Sets of strings into the expected hash structure.
         Entitlements.logger.debug "Loading organization members and roles for #{org} from cache"
         result = admin_from_cache.map { |uid| [uid, "ADMIN"] }.to_h
         result.merge! member_from_cache.map { |uid| [uid, "MEMBER"] }.to_h
         [result, true]
+      end
+
+      # Use GraphQL in GitHub Actions, where entitlements-caches can answer it, and REST elsewhere.
+      #
+      # Takes no parameters.
+      #
+      # Returns Hash of { "username" => "ROLE" } where "ROLE" is from GraphQL Enum.
+      Contract C::None => C::HashOf[String => String]
+      def members_and_roles_from_api
+        ENV["GITHUB_RUN_ID"] ? members_and_roles_from_graphql : members_and_roles_from_rest
       end
 
       # Query GraphQL API to get a list of members and their roles.

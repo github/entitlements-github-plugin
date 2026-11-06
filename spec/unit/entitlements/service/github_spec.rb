@@ -48,8 +48,8 @@ describe Entitlements::Service::GitHub do
       }
     end
 
-    it "queries GraphQL and converts Enum to Entitlements key" do
-      expect(subject).to receive(:members_and_roles_from_graphql).and_return(members_and_roles)
+    it "converts Enum to Entitlements key" do
+      expect(subject).to receive(:members_and_roles_from_api).and_return(members_and_roles)
       expect(subject.org_members).to eq(
                                        "alice" => "member", "bob" => "admin", "charles" => "member", "david" => "member"
                                      )
@@ -102,7 +102,7 @@ describe Entitlements::Service::GitHub do
       it "returns false" do
         cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil } }, invalid: Set.new }
 
-        expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer)
+        expect(subject).to receive(:members_and_roles_from_api).and_return(answer)
 
         expect(subject.org_members_from_predictive_cache?).to eq(false)
       end
@@ -112,7 +112,7 @@ describe Entitlements::Service::GitHub do
       it "returns true" do
         cache[:predictive_state] = { by_dn: { admin_dn => { members: admins, metadata: nil }, member_dn => { members:, metadata: nil } }, invalid: Set.new }
 
-        expect(subject).not_to receive(:members_and_roles_from_graphql)
+        expect(subject).not_to receive(:members_and_roles_from_api)
 
         expect(subject.org_members_from_predictive_cache?).to eq(true)
       end
@@ -136,7 +136,7 @@ describe Entitlements::Service::GitHub do
       answer_2 = answer.dup
       answer_2["ragamuffin"] = "ADMIN"
 
-      expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer_2)
+      expect(subject).to receive(:members_and_roles_from_api).and_return(answer_2)
       expect(logger).to receive(:debug).with("Invalidating cache entries for cn=(admin|member),ou=kittensinc,ou=GitHub,dc=github,dc=fake")
       expect(logger).to receive(:debug).with("members(cn=admin,ou=kittensinc,ou=GitHub,dc=github,dc=fake): DN has been marked invalid in cache")
       expect(logger).to receive(:debug).with("members(cn=member,ou=kittensinc,ou=GitHub,dc=github,dc=fake): DN has been marked invalid in cache")
@@ -144,7 +144,7 @@ describe Entitlements::Service::GitHub do
       subject.invalidate_org_members_predictive_cache
 
       # Check that the re-read has occurred and the correct result is achieved.
-      expect(subject).not_to receive(:members_and_roles_from_graphql) # Should already be in object's cache
+      expect(subject).not_to receive(:members_and_roles_from_api) # Should already be in object's cache
       expect(subject.org_members).to eq(answer_2.map { |k, v| [k, v.downcase] }.to_h)
     end
   end
@@ -160,7 +160,7 @@ describe Entitlements::Service::GitHub do
       it "logs and returns data from cache" do
         cache[:predictive_state] = { by_dn: { admin_dn => { members: Set.new(admins), metadata: nil }, member_dn => { members: Set.new(members), metadata: nil } }, invalid: Set.new }
 
-        expect(subject).not_to receive(:members_and_roles_from_graphql)
+        expect(subject).not_to receive(:members_and_roles_from_api)
         expect(logger).to receive(:debug).with("Loading organization members and roles for kittensinc from cache")
 
         result = subject.send(:members_and_roles_from_graphql_or_cache)
@@ -169,16 +169,34 @@ describe Entitlements::Service::GitHub do
     end
 
     context "with data in cache invalid" do
-      it "calls members_and_roles_from_graphql" do
+      it "calls members_and_roles_from_api" do
         cache[:predictive_state] = { by_dn: {}, invalid: Set.new }
 
         expect(logger).to receive(:debug).with("members(#{admin_dn}): DN does not exist in cache")
         expect(logger).to receive(:debug).with("members(#{member_dn}): DN does not exist in cache")
-        expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer)
+        expect(subject).to receive(:members_and_roles_from_api).and_return(answer)
 
         result = subject.send(:members_and_roles_from_graphql_or_cache)
         expect(result).to eq([answer, false])
       end
+    end
+  end
+
+  describe "#members_and_roles_from_api" do
+    let(:answer) { { "monalisa" => "ADMIN" } }
+
+    it "uses GraphQL when GITHUB_RUN_ID is set" do
+      stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345"))
+      expect(subject).to receive(:members_and_roles_from_graphql).and_return(answer)
+      expect(subject).not_to receive(:members_and_roles_from_rest)
+      expect(subject.send(:members_and_roles_from_api)).to eq(answer)
+    end
+
+    it "uses REST when GITHUB_RUN_ID is not set" do
+      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID"))
+      expect(subject).to receive(:members_and_roles_from_rest).and_return(answer)
+      expect(subject).not_to receive(:members_and_roles_from_graphql)
+      expect(subject.send(:members_and_roles_from_api)).to eq(answer)
     end
   end
 
