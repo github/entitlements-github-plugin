@@ -343,8 +343,15 @@ module Entitlements
           client.organization_members(org, { role:, page: 1 })
         end
 
-        last = client.last_response.rels[:last]
-        last_page = last ? URI.decode_www_form(URI(last.href).query).to_h.fetch("page").to_i : 1
+        rels = client.last_response.rels
+        # GitHub can omit rel="last", so fall back to fetching one page at a time.
+        if rels[:next] && !rels[:last]
+          return Retryable.with_context(:default) do
+            octokit.organization_members(org, { role: })
+          end
+        end
+
+        last_page = rels[:last] ? URI.decode_www_form(URI(rels[:last].href).query).to_h.fetch("page").to_i : 1
         pages = Queue.new
         (2..last_page).each { |page| pages << page }
         pages.close
@@ -360,6 +367,10 @@ module Entitlements
               end)
             end
             members
+          rescue StandardError
+            # Stop the other threads from fetching more pages.
+            pages.clear
+            raise
           end
         end
 

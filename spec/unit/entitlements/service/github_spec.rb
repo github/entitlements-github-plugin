@@ -276,6 +276,35 @@ describe Entitlements::Service::GitHub do
 
       expect { subject.send(:members_and_roles_from_rest_in_parallel) }.to raise_error(Octokit::TooManyRequests)
     end
+
+    it "stops fetching pages after a page fails" do
+      stub_members_page("admin", 1, [])
+      stub_members_page("member", 1, %w[ocicat], last_page: 20)
+      stub_request(:get, members_url).
+        with(query: hash_including("role" => "member")).
+        to_return(status: 403, headers: { "Content-Type" => "application/json" }, body: JSON.generate(message: "You have exceeded a secondary rate limit."))
+      stub_members_page("member", 1, %w[ocicat], last_page: 20)
+
+      queue = nil
+      allow(Queue).to receive(:new).and_wrap_original { |m| queue = m.call }
+
+      expect { subject.send(:members_and_roles_from_rest_in_parallel) }.to raise_error(Octokit::TooManyRequests)
+      expect(queue).to be_empty
+    end
+
+    it "falls back to sequential pagination when rel=last is missing" do
+      stub_members_page("admin", 1, [])
+      stub_request(:get, members_url).
+        with(query: { "role" => "member", "page" => "1", "per_page" => "100" }).
+        to_return(status: 200, headers: { "Content-Type" => "application/json", "Link" => "<#{members_url}?page=2&per_page=100&role=member>; rel=\"next\"" }, body: JSON.generate([{ login: "ocicat" }]))
+      stub_request(:get, members_url).
+        with(query: { "role" => "member", "per_page" => "100" }).
+        to_return(status: 200, headers: { "Content-Type" => "application/json", "Link" => "<#{members_url}?page=2&per_page=100&role=member>; rel=\"next\"" }, body: JSON.generate([{ login: "ocicat" }]))
+      stub_members_page("member", 2, %w[blackmanx])
+
+      expect(Thread).not_to receive(:new)
+      expect(subject.send(:members_and_roles_from_rest_in_parallel)).to eq({ "ocicat" => "MEMBER", "blackmanx" => "MEMBER" })
+    end
   end
 
   describe "#members_and_roles_from_graphql" do
