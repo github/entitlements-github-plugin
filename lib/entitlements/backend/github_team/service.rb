@@ -385,7 +385,9 @@ module Entitlements
                         login
                       }
                       role
-                      cursor
+                    }
+                    pageInfo {
+                      endCursor
                     }
                   }
                 }
@@ -404,7 +406,8 @@ module Entitlements
             team_id = team.fetch("databaseId")
             parent_team_name = team.dig("parentTeam", "slug")
 
-            edges = team.fetch("members").fetch("edges")
+            members = team.fetch("members")
+            edges = members.fetch("edges")
             break unless edges.any?
 
             buffer = edges.map { |e| e.fetch("node").fetch("login").downcase }
@@ -415,7 +418,7 @@ module Entitlements
               roles[e.fetch("node").fetch("login").downcase] = role
             end
 
-            cursor = edges.last.fetch("cursor")
+            cursor = members.dig("pageInfo", "endCursor") || edges.last["cursor"]
             next if cursor && buffer.size == max_graphql_results
 
             break
