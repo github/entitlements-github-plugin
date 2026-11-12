@@ -193,28 +193,14 @@ describe Entitlements::Service::GitHub do
     end
 
     it "uses REST when GITHUB_RUN_ID is not set" do
-      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID"))
+      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID", "ENTITLEMENTS_PARALLEL_ORG_MEMBERS"))
       expect(subject).to receive(:members_and_roles_from_rest).and_return(answer)
       expect(subject).not_to receive(:members_and_roles_from_graphql)
       expect(subject.send(:members_and_roles_from_api)).to eq(answer)
     end
 
-    it "uses parallel REST for a .ghe.com org when GITHUB_RUN_ID is set" do
-      stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345"))
-      ghe_com = described_class.new(
-        addr: "https://api.kittensinc.ghe.com",
-        org: "kittensinc",
-        token: "GoPackGo",
-        ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake"
-      )
-      expect(ghe_com).to receive(:members_and_roles_from_rest_in_parallel).and_return(answer)
-      expect(ghe_com).not_to receive(:members_and_roles_from_rest)
-      expect(ghe_com).not_to receive(:members_and_roles_from_graphql)
-      expect(ghe_com.send(:members_and_roles_from_api)).to eq(answer)
-    end
-
-    it "uses sequential REST for a .ghe.com org when GITHUB_RUN_ID is not set" do
-      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID"))
+    it "uses REST for a .ghe.com org when GITHUB_RUN_ID is set" do
+      stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345").except("ENTITLEMENTS_PARALLEL_ORG_MEMBERS"))
       ghe_com = described_class.new(
         addr: "https://api.kittensinc.ghe.com",
         org: "kittensinc",
@@ -222,8 +208,15 @@ describe Entitlements::Service::GitHub do
         ou: "ou=kittensinc,ou=GitHub,dc=github,dc=fake"
       )
       expect(ghe_com).to receive(:members_and_roles_from_rest).and_return(answer)
-      expect(ghe_com).not_to receive(:members_and_roles_from_rest_in_parallel)
+      expect(ghe_com).not_to receive(:members_and_roles_from_graphql)
       expect(ghe_com.send(:members_and_roles_from_api)).to eq(answer)
+    end
+
+    it "uses parallel REST when ENTITLEMENTS_PARALLEL_ORG_MEMBERS is set" do
+      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID").merge("ENTITLEMENTS_PARALLEL_ORG_MEMBERS" => "1"))
+      expect(subject).to receive(:members_and_roles_from_rest_in_parallel).and_return(answer)
+      expect(subject).not_to receive(:members_and_roles_from_rest)
+      expect(subject.send(:members_and_roles_from_api)).to eq(answer)
     end
   end
 

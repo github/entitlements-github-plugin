@@ -215,18 +215,18 @@ module Entitlements
       end
 
       # Use GraphQL in GitHub Actions, where entitlements-caches can answer it, and REST elsewhere.
-      # .ghe.com orgs are not served by entitlements-caches, so in GitHub Actions they use REST
-      # with pages fetched in parallel.
+      # .ghe.com orgs are not served by entitlements-caches, so they always use REST.
+      # Set ENTITLEMENTS_PARALLEL_ORG_MEMBERS to fetch REST pages in parallel.
       #
       # Takes no parameters.
       #
       # Returns Hash of { "username" => "ROLE" } where "ROLE" is from GraphQL Enum.
       Contract C::None => C::HashOf[String => String]
       def members_and_roles_from_api
-        return members_and_roles_from_rest unless ENV["GITHUB_RUN_ID"]
-        return members_and_roles_from_rest_in_parallel if graphql_uri.host.end_with?(".ghe.com")
+        return members_and_roles_from_graphql if ENV["GITHUB_RUN_ID"] && !graphql_uri.host.end_with?(".ghe.com")
+        return members_and_roles_from_rest_in_parallel if ENV["ENTITLEMENTS_PARALLEL_ORG_MEMBERS"]
 
-        members_and_roles_from_graphql
+        members_and_roles_from_rest
       end
 
       # Query GraphQL API to get a list of members and their roles.
