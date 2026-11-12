@@ -140,8 +140,11 @@ module Entitlements
           end
         end
 
+        # Set ENTITLEMENTS_PREFETCH_PENDING_MEMBERS to also fetch pending members here, where
+        # orgs can run in parallel, instead of during the serial calculation phase.
         def prefetch
           existing_groups
+          provider.pending_members if ENV["ENTITLEMENTS_PREFETCH_PENDING_MEMBERS"]
         end
 
         private
