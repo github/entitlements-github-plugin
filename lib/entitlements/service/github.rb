@@ -21,6 +21,9 @@ module Entitlements
       MAX_GRAPHQL_RETRIES = 3
       WAIT_BETWEEN_GRAPHQL_RETRIES = 1
 
+      # Threads used to fetch REST pages in parallel
+      REST_THREADS = 8
+
       attr_reader :addr, :org, :token, :ou, :ignore_not_found
 
       # Constructor.
@@ -169,17 +172,25 @@ module Entitlements
       # Returns an Octokit client object.
       Contract C::None => Octokit::Client
       def octokit
-        @octokit ||= begin
-          client = Octokit::Client.new(access_token: token)
-          middleware = Octokit::Default.middleware.dup
-          middleware.adapter :net_http_persistent
-          client.middleware = middleware
-          client.api_endpoint = addr if addr
-          client.auto_paginate = true
-          client.per_page = 100
-          Entitlements.logger.debug "Setting up GitHub API connection to #{client.api_endpoint}"
-          client
-        end
+        @octokit ||= new_octokit(auto_paginate: true)
+      end
+
+      # Build a new octokit client.
+      #
+      # auto_paginate - Boolean to follow pagination automatically
+      #
+      # Returns an Octokit client object.
+      Contract C::KeywordArgs[auto_paginate: C::Bool] => Octokit::Client
+      def new_octokit(auto_paginate:)
+        client = Octokit::Client.new(access_token: token)
+        middleware = Octokit::Default.middleware.dup
+        middleware.adapter :net_http_persistent
+        client.middleware = middleware
+        client.api_endpoint = addr if addr
+        client.auto_paginate = auto_paginate
+        client.per_page = 100
+        Entitlements.logger.debug "Setting up GitHub API connection to #{client.api_endpoint}"
+        client
       end
 
       # Get data from the predictive updates cache if it's available and valid, or else get it
@@ -205,17 +216,17 @@ module Entitlements
 
       # Use GraphQL in GitHub Actions, where entitlements-caches can answer it, and REST elsewhere.
       # .ghe.com orgs are not served by entitlements-caches, so they always use REST.
+      # Set ENTITLEMENTS_PARALLEL_ORG_MEMBERS to fetch REST pages in parallel.
       #
       # Takes no parameters.
       #
       # Returns Hash of { "username" => "ROLE" } where "ROLE" is from GraphQL Enum.
       Contract C::None => C::HashOf[String => String]
       def members_and_roles_from_api
-        if ENV["GITHUB_RUN_ID"] && !graphql_uri.host.end_with?(".ghe.com")
-          members_and_roles_from_graphql
-        else
-          members_and_roles_from_rest
-        end
+        return members_and_roles_from_graphql if ENV["GITHUB_RUN_ID"] && !graphql_uri.host.end_with?(".ghe.com")
+        return members_and_roles_from_rest_in_parallel if ENV["ENTITLEMENTS_PARALLEL_ORG_MEMBERS"]
+
+        members_and_roles_from_rest
       end
 
       # Query GraphQL API to get a list of members and their roles.
@@ -296,6 +307,74 @@ module Entitlements
         end
 
         result
+      end
+
+      # Same as members_and_roles_from_rest, but fetches pages in parallel.
+      #
+      # Takes no parameters.
+      #
+      # Returns Hash of { "username" => "ROLE" } where "ROLE" is ADMIN or MEMBER
+      Contract C::None => C::HashOf[String => String]
+      def members_and_roles_from_rest_in_parallel
+        Entitlements.logger.debug "Loading organization members and roles for #{org} in parallel"
+        result = {}
+
+        organization_members_in_parallel("admin").each do |member|
+          result[member[:login].downcase] = "ADMIN"
+        end
+
+        organization_members_in_parallel("member").each do |member|
+          result[member[:login].downcase] = "MEMBER"
+        end
+
+        result
+      end
+
+      # Fetch the first page of organization members for a role, then the remaining pages
+      # using up to REST_THREADS threads.
+      #
+      # role - String with the role ("admin" or "member")
+      #
+      # Returns Array of member resources.
+      Contract String => C::ArrayOf[C::Any]
+      def organization_members_in_parallel(role)
+        client = new_octokit(auto_paginate: false)
+        first_page = Retryable.with_context(:default) do
+          client.organization_members(org, { role:, page: 1 })
+        end
+
+        rels = client.last_response.rels
+        # GitHub can omit rel="last", so fall back to fetching one page at a time.
+        if rels[:next] && !rels[:last]
+          return Retryable.with_context(:default) do
+            octokit.organization_members(org, { role: })
+          end
+        end
+
+        last_page = rels[:last] ? URI.decode_www_form(URI(rels[:last].href).query).to_h.fetch("page").to_i : 1
+        pages = Queue.new
+        (2..last_page).each { |page| pages << page }
+        pages.close
+
+        threads = Array.new([REST_THREADS, last_page - 1].min) do
+          Thread.new do
+            Thread.current.report_on_exception = false
+            thread_client = new_octokit(auto_paginate: false)
+            members = []
+            while (page = pages.pop)
+              members.concat(Retryable.with_context(:default) do
+                thread_client.organization_members(org, { role:, page: })
+              end)
+            end
+            members
+          rescue StandardError
+            # Stop the other threads from fetching more pages.
+            pages.clear
+            raise
+          end
+        end
+
+        first_page + threads.flat_map(&:value)
       end
 
       # Query GraphQL API to get a list of pending members for the organization.
