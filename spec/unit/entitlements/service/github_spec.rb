@@ -193,14 +193,14 @@ describe Entitlements::Service::GitHub do
     end
 
     it "uses REST when GITHUB_RUN_ID is not set" do
-      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID"))
+      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID", "ENTITLEMENTS_PARALLEL_ORG_MEMBERS"))
       expect(subject).to receive(:members_and_roles_from_rest).and_return(answer)
       expect(subject).not_to receive(:members_and_roles_from_graphql)
       expect(subject.send(:members_and_roles_from_api)).to eq(answer)
     end
 
     it "uses REST for a .ghe.com org when GITHUB_RUN_ID is set" do
-      stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345"))
+      stub_const("ENV", ENV.to_h.merge("GITHUB_RUN_ID" => "12345").except("ENTITLEMENTS_PARALLEL_ORG_MEMBERS"))
       ghe_com = described_class.new(
         addr: "https://api.kittensinc.ghe.com",
         org: "kittensinc",
@@ -210,6 +210,93 @@ describe Entitlements::Service::GitHub do
       expect(ghe_com).to receive(:members_and_roles_from_rest).and_return(answer)
       expect(ghe_com).not_to receive(:members_and_roles_from_graphql)
       expect(ghe_com.send(:members_and_roles_from_api)).to eq(answer)
+    end
+
+    it "uses parallel REST when ENTITLEMENTS_PARALLEL_ORG_MEMBERS is set" do
+      stub_const("ENV", ENV.to_h.except("GITHUB_RUN_ID").merge("ENTITLEMENTS_PARALLEL_ORG_MEMBERS" => "1"))
+      expect(subject).to receive(:members_and_roles_from_rest_in_parallel).and_return(answer)
+      expect(subject).not_to receive(:members_and_roles_from_rest)
+      expect(subject.send(:members_and_roles_from_api)).to eq(answer)
+    end
+  end
+
+  describe "#members_and_roles_from_rest_in_parallel" do
+    let(:members_url) { "https://github.fake/api/v3/orgs/kittensinc/members" }
+
+    def stub_members_page(role, page, logins, last_page: nil)
+      headers = { "Content-Type" => "application/json" }
+      headers["Link"] = "<#{members_url}?page=#{last_page}&per_page=100&role=#{role}>; rel=\"last\"" if last_page
+      stub_request(:get, members_url).
+        with(query: { "role" => role, "page" => page.to_s, "per_page" => "100" }).
+        to_return(status: 200, headers:, body: JSON.generate(logins.map { |login| { login: } }))
+    end
+
+    it "fetches all pages and returns the expected hash" do
+      stub_members_page("admin", 1, %w[Monalisa])
+      stub_members_page("member", 1, %w[ocicat blackmanx], last_page: 10)
+      (2..10).each { |page| stub_members_page("member", page, ["cat#{page}"]) }
+
+      result = subject.send(:members_and_roles_from_rest_in_parallel)
+      expected = { "monalisa" => "ADMIN", "ocicat" => "MEMBER", "blackmanx" => "MEMBER" }
+      (2..10).each { |page| expected["cat#{page}"] = "MEMBER" }
+      expect(result).to eq(expected)
+    end
+
+    it "uses at most REST_THREADS threads" do
+      stub_members_page("admin", 1, [])
+      stub_members_page("member", 1, %w[ocicat], last_page: 20)
+      (2..20).each { |page| stub_members_page("member", page, ["cat#{page}"]) }
+
+      expect(Thread).to receive(:new).exactly(described_class::REST_THREADS).times.and_call_original
+      result = subject.send(:members_and_roles_from_rest_in_parallel)
+      expect(result.size).to eq(20)
+    end
+
+    it "returns an empty hash for an empty organization" do
+      stub_members_page("admin", 1, [])
+      stub_members_page("member", 1, [])
+
+      expect(Thread).not_to receive(:new)
+      expect(subject.send(:members_and_roles_from_rest_in_parallel)).to eq({})
+    end
+
+    it "raises if a page keeps failing" do
+      stub_members_page("admin", 1, [])
+      stub_members_page("member", 1, %w[ocicat], last_page: 2)
+      stub_request(:get, members_url).
+        with(query: { "role" => "member", "page" => "2", "per_page" => "100" }).
+        to_return(status: 403, headers: { "Content-Type" => "application/json" }, body: JSON.generate(message: "You have exceeded a secondary rate limit."))
+
+      expect { subject.send(:members_and_roles_from_rest_in_parallel) }.to raise_error(Octokit::TooManyRequests)
+    end
+
+    it "stops fetching pages after a page fails" do
+      stub_members_page("admin", 1, [])
+      stub_members_page("member", 1, %w[ocicat], last_page: 20)
+      stub_request(:get, members_url).
+        with(query: hash_including("role" => "member")).
+        to_return(status: 403, headers: { "Content-Type" => "application/json" }, body: JSON.generate(message: "You have exceeded a secondary rate limit."))
+      stub_members_page("member", 1, %w[ocicat], last_page: 20)
+
+      queue = nil
+      allow(Queue).to receive(:new).and_wrap_original { |m| queue = m.call }
+
+      expect { subject.send(:members_and_roles_from_rest_in_parallel) }.to raise_error(Octokit::TooManyRequests)
+      expect(queue).to be_empty
+    end
+
+    it "falls back to sequential pagination when rel=last is missing" do
+      stub_members_page("admin", 1, [])
+      stub_request(:get, members_url).
+        with(query: { "role" => "member", "page" => "1", "per_page" => "100" }).
+        to_return(status: 200, headers: { "Content-Type" => "application/json", "Link" => "<#{members_url}?page=2&per_page=100&role=member>; rel=\"next\"" }, body: JSON.generate([{ login: "ocicat" }]))
+      stub_request(:get, members_url).
+        with(query: { "role" => "member", "per_page" => "100" }).
+        to_return(status: 200, headers: { "Content-Type" => "application/json", "Link" => "<#{members_url}?page=2&per_page=100&role=member>; rel=\"next\"" }, body: JSON.generate([{ login: "ocicat" }]))
+      stub_members_page("member", 2, %w[blackmanx])
+
+      expect(Thread).not_to receive(:new)
+      expect(subject.send(:members_and_roles_from_rest_in_parallel)).to eq({ "ocicat" => "MEMBER", "blackmanx" => "MEMBER" })
     end
   end
 

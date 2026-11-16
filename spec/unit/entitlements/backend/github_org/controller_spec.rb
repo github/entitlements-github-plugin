@@ -818,6 +818,25 @@ describe Entitlements::Backend::GitHubOrg::Controller do
     end
   end
 
+  describe "#prefetch" do
+    before do
+      allow(subject).to receive(:provider).and_return(provider)
+      allow(subject).to receive(:existing_groups)
+    end
+
+    it "fetches pending members when ENTITLEMENTS_PREFETCH_PENDING_MEMBERS is set" do
+      stub_const("ENV", ENV.to_h.merge("ENTITLEMENTS_PREFETCH_PENDING_MEMBERS" => "1"))
+      expect(provider).to receive(:pending_members)
+      subject.prefetch
+    end
+
+    it "does not fetch pending members when ENTITLEMENTS_PREFETCH_PENDING_MEMBERS is not set" do
+      stub_const("ENV", ENV.to_h.except("ENTITLEMENTS_PREFETCH_PENDING_MEMBERS"))
+      expect(provider).not_to receive(:pending_members)
+      subject.prefetch
+    end
+  end
+
   describe "#validate_config!" do
     context "with an invalid feature" do
       let(:config_data) do
