@@ -127,6 +127,7 @@ module Entitlements
             "features"         => { required: false, type: Array },
             "ignore"           => { required: false, type: Array },
             "ignore_not_found" => { required: false, type: [FalseClass, TrueClass] },
+            "preserve_enterprise_members" => { required: false, type: [FalseClass, TrueClass] },
           })
           text = "GitHub organization group #{key.inspect}"
           Entitlements::Util::Util.validate_attr!(spec, data, text)
@@ -248,6 +249,10 @@ module Entitlements
             # :removed (remove a user from the organization). This operates across all roles.
             chg = categorized_changes
 
+            if config["preserve_enterprise_members"] && features.member?("remove") && chg[:removed].any?
+              preserve_enterprise_members!(groups, chg)
+            end
+
             # Keep track of any actions needed to make changes.
             result = []
 
@@ -368,6 +373,21 @@ module Entitlements
 
           @changes ||= result
           result
+        end
+
+        def preserve_enterprise_members!(groups, changes)
+          enterprise_members = provider.enterprise_members
+          changes[:removed].delete_if do |key, data|
+            username = Entitlements::Util::Util.first_attr(data[:member]).downcase
+            teams = enterprise_members[username]
+            next false unless teams
+
+            # Enterprise membership does not exempt an unentitled admin from demotion.
+            groups.fetch("member").add_member(data[:member])
+            changes[:moved][key] = data.merge(role: "member") if data[:role] == "admin"
+            logger.warn "GitHubOrg #{group_name}: Preserving #{username} membership granted by enterprise teams #{teams.join(', ')}."
+            true
+          end
         end
 
         # For a given OU, translate the entitlement members into `invited`, `removed`, and `moved` hashes.
