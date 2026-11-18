@@ -148,6 +148,184 @@ describe Entitlements::Backend::GitHubOrg::Controller do
       end
     end
 
+    context "with enterprise-backed membership" do
+      let(:backend_config) { base_backend_config.merge("preserve_enterprise_members" => true) }
+      let(:members_response) do
+        {
+          "mainecoon" => "admin",
+          "toyger" => "admin",
+          "highlander" => "admin",
+          "blackmanx" => "member",
+          "ragamuffin" => "member",
+          "peterbald" => "member",
+          "russianblue" => "member"
+        }
+      end
+      let(:enterprise_members) do
+        %w[toyger russianblue].to_h { |login| [login, ["ent:security"]] }
+      end
+
+      before do
+        allow(Entitlements::Data::Groups::Calculated).to receive(:read_all)
+          .and_return(Set.new([org1_admin_dn, org1_member_dn]))
+        allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_admin_dn).and_return(org1_admin_group)
+        allow(Entitlements::Data::Groups::Calculated).to receive(:read).with(org1_member_dn).and_return(org1_member_group)
+        allow(Entitlements::Backend::GitHubOrg::Service).to receive(:new).and_return(service)
+        allow(service).to receive(:org).and_return("kittensinc")
+        allow(service).to receive(:ou).and_return(base_backend_config.fetch("base"))
+        allow(service).to receive(:org_members).and_return(members_response)
+        allow(service).to receive(:pending_members).and_return(Set.new)
+        allow(service).to receive(:org_members_from_predictive_cache?).and_return(false)
+        allow(service).to receive(:enterprise_members).and_return(enterprise_members)
+      end
+
+      it "preserves enterprise-backed admins without suppressing unrelated role moves" do
+        expect(logger).to receive(:warn).with(/DEFER toyger.*admin.*ent:security/)
+        expect(logger).to receive(:warn).with(/Preserving russianblue.*ent:security/)
+
+        subject.calculate
+
+        expect(subject.actions.map(&:implementation)).to eq([
+          [{ action: :add, person: "RagaMuffin" }],
+          [{ action: :add, person: "HiGhlanDer" }]
+        ])
+        expect(subject.actions.first.updated.member_strings_insensitive).to include("toyger")
+        expect(subject.actions.last.updated.member_strings_insensitive).not_to include("toyger")
+        expect(subject.actions.last.updated.member_strings_insensitive).to include("russianblue")
+        expect(subject.actions.last.existing.member_strings_insensitive).to include("russianblue")
+      end
+
+      it "still removes users without an enterprise grant" do
+        enterprise_members.delete("russianblue")
+
+        subject.calculate
+
+        expect(subject.actions.flat_map(&:implementation)).to include(action: :remove, person: "russianblue")
+        expect(subject.actions.flat_map(&:implementation)).not_to include(action: :remove, person: "toyger")
+      end
+
+      it "reports no changes when only inherited removals remain" do
+        members_response["toyger"] = "member"
+        members_response["highlander"] = "member"
+        members_response["ragamuffin"] = "admin"
+
+        subject.calculate
+
+        expect(subject.actions).to be_empty
+      end
+
+      it "does not discover enterprise teams when only promotions remain" do
+        members_response.delete("toyger")
+        members_response.delete("russianblue")
+        members_response["highlander"] = "member"
+        expect(service).not_to receive(:enterprise_members)
+
+        subject.calculate
+
+        expect(subject.actions.first.implementation).to eq([{ action: :add, person: "RagaMuffin" }])
+      end
+
+      it "does not discover enterprise teams when removals are disabled" do
+        backend_config["features"] = ["invite"]
+        members_response["highlander"] = "member"
+        members_response["ragamuffin"] = "admin"
+        expect(service).not_to receive(:enterprise_members)
+
+        subject.calculate
+
+        expect(subject.actions).to be_empty
+      end
+
+      it "defers an enterprise-backed admin downgrade even without org removals" do
+        members_response.delete("toyger")
+        members_response.delete("russianblue")
+        members_response["ragamuffin"] = "admin"
+        enterprise_members["highlander"] = ["ent:owners"]
+        expect(logger).to receive(:warn).with(/DEFER highlander.*admin.*ent:owners/)
+
+        subject.calculate
+
+        expect(subject.actions).to be_empty
+        expect(org1_admin_group.member_strings_insensitive).to include("highlander")
+        expect(org1_member_group.member_strings_insensitive).not_to include("highlander")
+      end
+
+      it "defers enterprise-backed admin downgrades even when org removals are disabled" do
+        backend_config["features"] = []
+        members_response["ragamuffin"] = "admin"
+        enterprise_members["highlander"] = ["ent:owners"]
+
+        subject.calculate
+
+        expect(subject.actions).to be_empty
+      end
+
+      it "still permits an explicit promotion for an enterprise-backed member" do
+        enterprise_members["ragamuffin"] = ["ent:security"]
+
+        subject.calculate
+
+        expect(subject.actions.first.implementation).to eq([{ action: :add, person: "RagaMuffin" }])
+      end
+
+      it "keeps existing removal behavior unless explicitly enabled" do
+        backend_config.delete("preserve_enterprise_members")
+        expect(service).not_to receive(:enterprise_members)
+
+        subject.calculate
+
+        expect(subject.actions.flat_map(&:implementation)).to include(
+          { action: :remove, person: "toyger" },
+          { action: :remove, person: "russianblue" }
+        )
+      end
+
+      it "aborts calculation when enterprise membership cannot be read" do
+        allow(service).to receive(:enterprise_members).and_raise(Octokit::Forbidden)
+
+        expect { subject.calculate }.to raise_error(Octokit::Forbidden)
+        expect(subject.actions).to be_empty
+      end
+
+      context "through the GitHub API" do
+        let(:service) do
+          Entitlements::Backend::GitHubOrg::Service.new(
+            addr: "https://github.fake/api/v3",
+            org: "kittensinc",
+            token: "GoPackGo",
+            ou: base_backend_config.fetch("base")
+          )
+        end
+
+        it "never attempts the forbidden inherited removal but applies unrelated removals" do
+          members_response["highlander"] = "member"
+          members_response["ragamuffin"] = "admin"
+          allow(service).to receive(:enterprise_members).and_call_original
+          stub_request(:get, "https://github.fake/api/v3/orgs/kittensinc/teams")
+            .with(query: { team_type: "enterprise", per_page: "100" })
+            .to_return(
+              headers: { "Content-Type" => "application/json" },
+              body: JSON.generate([{ type: "enterprise", slug: "ent:security" }])
+            )
+          stub_request(:get, "https://github.fake/api/v3/orgs/kittensinc/teams/ent:security/members")
+            .with(query: { per_page: "100" })
+            .to_return(headers: { "Content-Type" => "application/json" }, body: JSON.generate([{ login: "TOYGER" }]))
+          removal = stub_request(:delete, "https://github.fake/api/v3/orgs/kittensinc/memberships/russianblue")
+            .to_return(status: 204)
+          subject.calculate
+          subject.actions.each { |action| subject.apply(action) }
+
+          expect(removal).to have_been_requested.once
+          expect(a_request(:delete, "https://github.fake/api/v3/orgs/kittensinc/memberships/toyger"))
+            .not_to have_been_made
+          expect(a_request(:put, "https://github.fake/api/v3/orgs/kittensinc/memberships/toyger"))
+            .not_to have_been_made
+          expect(service.org_members).to include("toyger" => "admin")
+          expect(service.org_members).not_to have_key("russianblue")
+        end
+      end
+    end
+
     context "with pending members" do
       let(:org1_members_response) do
         {

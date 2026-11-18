@@ -16,6 +16,79 @@ describe Entitlements::Backend::GitHubOrg::Service do
     )
   end
 
+  describe "#enterprise_members" do
+    let(:teams_url) { "https://github.fake/api/v3/orgs/kittensinc/teams?team_type=enterprise&per_page=100" }
+    let(:members_url) { "https://github.fake/api/v3/orgs/kittensinc/teams/ent:security/members?per_page=100" }
+    let(:json_headers) { { "Content-Type" => "application/json" } }
+
+    it "paginates teams and members, normalizes logins and records each upstream grant" do
+      next_teams = "#{teams_url}&page=2"
+      next_members = "#{members_url}&page=2"
+      stub_request(:get, teams_url).to_return(
+        headers: json_headers.merge("Link" => "<#{next_teams}>; rel=\"next\""),
+        body: JSON.generate([
+          { type: "enterprise", slug: "ent:security" },
+          { type: "organization", slug: "ordinary-team" }
+        ])
+      )
+      stub_request(:get, next_teams).to_return(
+        headers: json_headers,
+        body: JSON.generate([{ type: "enterprise", slug: "ent:audit" }])
+      )
+      stub_request(:get, members_url).to_return(
+        headers: json_headers.merge("Link" => "<#{next_members}>; rel=\"next\""),
+        body: JSON.generate([{ login: "MisFir3" }])
+      )
+      stub_request(:get, next_members).to_return(
+        headers: json_headers,
+        body: JSON.generate([{ login: "Alice" }])
+      )
+      stub_request(:get, "https://github.fake/api/v3/orgs/kittensinc/teams/ent:audit/members?per_page=100").to_return(
+        headers: json_headers,
+        body: JSON.generate([{ login: "misfir3" }])
+      )
+
+      expect(subject.enterprise_members).to eq(
+        "misfir3" => %w[ent:security ent:audit],
+        "alice" => ["ent:security"]
+      )
+      subject.enterprise_members
+      expect(a_request(:get, teams_url)).to have_been_made.once
+      expect(a_request(:get, members_url)).to have_been_made.once
+    end
+
+    it "returns no inherited grants when no enterprise teams are assigned" do
+      stub_request(:get, teams_url).to_return(headers: json_headers, body: "[]")
+
+      expect(subject.enterprise_members).to eq({})
+    end
+
+    it "does not interpret missing team provenance as an empty inherited membership" do
+      stub_request(:get, teams_url).to_return(
+        headers: json_headers,
+        body: JSON.generate([{ slug: "ent:security" }])
+      )
+
+      expect { subject.enterprise_members }.to raise_error(KeyError)
+    end
+
+    it "propagates forbidden team discovery instead of silently allowing removals" do
+      stub_request(:get, teams_url).to_return(status: 403, headers: json_headers, body: "{}")
+
+      expect { subject.enterprise_members }.to raise_error(Octokit::Forbidden)
+    end
+
+    it "propagates forbidden member discovery instead of returning partial results" do
+      stub_request(:get, teams_url).to_return(
+        headers: json_headers,
+        body: JSON.generate([{ type: "enterprise", slug: "ent:security" }])
+      )
+      stub_request(:get, members_url).to_return(status: 403, headers: json_headers, body: "{}")
+
+      expect { subject.enterprise_members }.to raise_error(Octokit::Forbidden)
+    end
+  end
+
   describe "#sync" do
     it "returns false when there were no changes to be made" do
       expect(logger).to receive(:debug).with(/sync\(admin\): Added 0, removed 0/)

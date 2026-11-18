@@ -80,6 +80,11 @@ module Entitlements
           github.pending_members
         end
 
+        Contract C::None => C::HashOf[String => C::ArrayOf[String]]
+        def enterprise_members
+          github.enterprise_members
+        end
+
         private
 
         # Determine the role name from a string or a group (with validation).

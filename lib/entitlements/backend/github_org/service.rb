@@ -9,6 +9,29 @@ module Entitlements
         include ::Contracts::Core
         C = ::Contracts
 
+        Contract C::None => C::HashOf[String => C::ArrayOf[String]]
+        def enterprise_members
+          @enterprise_members ||= begin
+            members = {}
+            teams = Retryable.with_context(:default, not: [Octokit::NotFound, Octokit::Forbidden]) do
+              octokit.paginate("orgs/#{org}/teams", team_type: "enterprise")
+            end
+            teams.each do |team|
+              next unless team.fetch(:type) == "enterprise"
+
+              slug = team.fetch(:slug)
+              team_members = Retryable.with_context(:default, not: [Octokit::NotFound, Octokit::Forbidden]) do
+                octokit.paginate("orgs/#{org}/teams/#{slug}/members")
+              end
+              team_members.each do |member|
+                username = member.fetch(:login).downcase
+                (members[username] ||= []) << slug
+              end
+            end
+            members
+          end
+        end
+
         # Sync the members of an organization in a given role to match the member list.
         #
         # implementation - An Hash of { action: :add/:remove, person: <person DN> }

@@ -127,6 +127,7 @@ module Entitlements
             "features"         => { required: false, type: Array },
             "ignore"           => { required: false, type: Array },
             "ignore_not_found" => { required: false, type: [FalseClass, TrueClass] },
+            "preserve_enterprise_members" => { required: false, type: [FalseClass, TrueClass] },
           })
           text = "GitHub organization group #{key.inspect}"
           Entitlements::Util::Util.validate_attr!(spec, data, text)
@@ -248,6 +249,8 @@ module Entitlements
             # :removed (remove a user from the organization). This operates across all roles.
             chg = categorized_changes
 
+            preserve_enterprise_members!(groups, chg, features) if config["preserve_enterprise_members"]
+
             # Keep track of any actions needed to make changes.
             result = []
 
@@ -368,6 +371,32 @@ module Entitlements
 
           @changes ||= result
           result
+        end
+
+        def preserve_enterprise_members!(groups, changes, features)
+          removals = features.member?("remove") ? changes[:removed] : {}
+          demotions = changes[:moved].select { |_, data| data[:role] == "member" }
+          candidates = removals.merge(demotions)
+          return if candidates.empty?
+
+          enterprise_members = provider.enterprise_members
+          candidates.each do |key, data|
+            username = Entitlements::Util::Util.first_attr(data[:member]).downcase
+            teams = enterprise_members[username]
+            next unless teams
+
+            role = demotions.key?(key) ? "admin" : data[:role]
+            groups.fetch(data[:role]).remove_member(data[:member])
+            groups.fetch(role).add_member(data[:member])
+            changes[:removed].delete(key)
+            changes[:moved].delete(key)
+
+            if role == "admin"
+              logger.warn "GitHubOrg #{group_name}: DEFER #{username} admin downgrade, role provenance is unknown for enterprise teams #{teams.join(', ')}. Leaving admin unchanged."
+            else
+              logger.warn "GitHubOrg #{group_name}: Preserving #{username} membership granted by enterprise teams #{teams.join(', ')}."
+            end
+          end
         end
 
         # For a given OU, translate the entitlement members into `invited`, `removed`, and `moved` hashes.
