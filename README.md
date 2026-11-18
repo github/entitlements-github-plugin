@@ -68,9 +68,10 @@ Set `preserve_enterprise_members: true` on a `github_org` backend to exclude
 organization removals for users whose membership is backed by an enterprise team.
 The option defaults to disabled.
 
-When removals are enabled and proposed, the backend lists the organization's
-enterprise teams using `GET /orgs/{org}/teams?team_type=enterprise`, then reads
-their members using `GET /orgs/{org}/teams/{team_slug}/members`. Both lists are
+When removals are enabled and proposed, or an admin-to-member change is proposed,
+the backend lists the organization's enterprise teams using
+`GET /orgs/{org}/teams?team_type=enterprise`, then reads their members using
+`GET /orgs/{org}/teams/{team_slug}/members`. Both lists are
 paginated and the result is reused within that backend instance, not persisted
 between runs. The configured token must be able to see all applicable enterprise
 teams and their members. Verify this with the deployment credential before
@@ -78,11 +79,15 @@ enabling the POC.
 
 Preserved removals are excluded from actions and the displayed diff, with a warning
 identifying the granting team. Actual organization membership stays visible to
-other backends. An enterprise-backed admin with no entitlement is demoted to
-member rather than removed, so the upstream membership does not exempt the admin
-role from reconciliation. Invitations, explicit role changes and removals without
-an upstream grant retain their existing behavior. Removing the enterprise grant
-makes a user eligible for removal on a subsequent run.
+other backends. The membership lookup does not prove whether an admin role is
+granted by the enterprise. For enterprise-backed admins, the POC therefore defers
+both removals and explicit admin-to-member changes with a `DEFER` warning rather
+than guessing that a demotion is safe. This does not certify their admin role as
+authorized. Its source must be reviewed before revoking it.
+
+Invitations, promotions and changes for users without an enterprise grant retain
+their existing behavior. Removing the enterprise grant makes a user eligible for
+normal reconciliation on a subsequent run.
 
 Discovery errors abort calculation rather than being treated as an empty list.
 This does not manage enterprise teams, revoke upstream access, or distinguish a

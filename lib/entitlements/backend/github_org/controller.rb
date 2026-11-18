@@ -249,9 +249,7 @@ module Entitlements
             # :removed (remove a user from the organization). This operates across all roles.
             chg = categorized_changes
 
-            if config["preserve_enterprise_members"] && features.member?("remove") && chg[:removed].any?
-              preserve_enterprise_members!(groups, chg)
-            end
+            preserve_enterprise_members!(groups, chg, features) if config["preserve_enterprise_members"]
 
             # Keep track of any actions needed to make changes.
             result = []
@@ -375,18 +373,29 @@ module Entitlements
           result
         end
 
-        def preserve_enterprise_members!(groups, changes)
+        def preserve_enterprise_members!(groups, changes, features)
+          removals = features.member?("remove") ? changes[:removed] : {}
+          demotions = changes[:moved].select { |_, data| data[:role] == "member" }
+          candidates = removals.merge(demotions)
+          return if candidates.empty?
+
           enterprise_members = provider.enterprise_members
-          changes[:removed].delete_if do |key, data|
+          candidates.each do |key, data|
             username = Entitlements::Util::Util.first_attr(data[:member]).downcase
             teams = enterprise_members[username]
-            next false unless teams
+            next unless teams
 
-            # Enterprise membership does not exempt an unentitled admin from demotion.
-            groups.fetch("member").add_member(data[:member])
-            changes[:moved][key] = data.merge(role: "member") if data[:role] == "admin"
-            logger.warn "GitHubOrg #{group_name}: Preserving #{username} membership granted by enterprise teams #{teams.join(', ')}."
-            true
+            role = demotions.key?(key) ? "admin" : data[:role]
+            groups.fetch(data[:role]).remove_member(data[:member])
+            groups.fetch(role).add_member(data[:member])
+            changes[:removed].delete(key)
+            changes[:moved].delete(key)
+
+            if role == "admin"
+              logger.warn "GitHubOrg #{group_name}: DEFER #{username} admin downgrade, role provenance is unknown for enterprise teams #{teams.join(', ')}. Leaving admin unchanged."
+            else
+              logger.warn "GitHubOrg #{group_name}: Preserving #{username} membership granted by enterprise teams #{teams.join(', ')}."
+            end
           end
         end
 
