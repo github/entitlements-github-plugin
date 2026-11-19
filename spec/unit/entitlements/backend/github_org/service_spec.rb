@@ -266,5 +266,39 @@ describe Entitlements::Backend::GitHubOrg::Service do
       expect(subject.pending_members).to eq(Set.new)
       expect(subject.org_members).to eq({})
     end
+
+    context "when the API returns a forbidden error" do
+      before do
+        allow(logger).to receive(:debug)
+        allow(subject).to receive(:org_members).and_return({ "bob" => "member" })
+      end
+
+      it "warns and returns false without retrying when membership is granted through an enterprise team" do
+        message = "Unable to remove bob from the organization as they have been granted membership through an enterprise team"
+        expect(logger).to receive(:warn).with(/Unable to remove bob from organization kittensinc: membership is granted through an enterprise team/)
+
+        stub = stub_request(:delete, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
+          status: 403,
+          headers: { "Content-type" => "application/json" },
+          body: JSON.generate({ "message" => message, "documentation_url" => "https://docs.github.com/rest" })
+        )
+
+        result = subject.send(:remove_user_from_organization, "bob")
+        expect(result).to eq(false)
+        expect(stub).to have_been_requested.once
+        expect(subject.org_members).to eq({ "bob" => "member" })
+      end
+
+      it "raises for other forbidden errors" do
+        stub_request(:delete, "https://github.fake/api/v3/orgs/kittensinc/memberships/bob").to_return(
+          status: 403,
+          headers: { "Content-type" => "application/json" },
+          body: JSON.generate({ "message" => "Forbidden", "documentation_url" => "https://docs.github.com/rest" })
+        )
+        allow(Retryable).to receive(:with_context).and_wrap_original { |m, *args, &block| m.call(*args, sleep: 0, &block) }
+
+        expect { subject.send(:remove_user_from_organization, "bob") }.to raise_error(Octokit::Forbidden)
+      end
+    end
   end
 end

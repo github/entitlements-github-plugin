@@ -87,9 +87,16 @@ module Entitlements
         def remove_user_from_organization(user)
           Entitlements.logger.debug "#{identifier} remove_user_from_organization(user=#{user}, org=#{org})"
 
+          # Rescue inside the block so Retryable does not retry this permanent failure.
           result = Retryable.with_context(:default) do
             octokit.remove_organization_membership(org, user:)
+          rescue Octokit::Forbidden => e # code 403
+            raise e unless e.message.match?(/granted membership through an enterprise team/i)
+
+            Entitlements.logger.warn "Unable to remove #{user} from organization #{org}: membership is granted through an enterprise team. Skipping; manual cleanup required. (#{e.message})"
+            :enterprise_team_membership
           end
+          return false if result == :enterprise_team_membership
 
           # If we removed the user, remove them from the cache of members, so that any GitHub team
           # operations in this organization will ignore this user.
